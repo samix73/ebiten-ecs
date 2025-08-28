@@ -31,12 +31,12 @@ func (em *EntityManager) NewEntity() EntityID {
 	return id
 }
 
-func (em *EntityManager) HasComponent(entityID EntityID, componentType reflect.Type) bool {
+func (em *EntityManager) HasComponent(entityID EntityID, componentType any) bool {
 	if _, exists := em.entities[entityID]; !exists {
 		return false
 	}
 
-	if _, exists := em.entityComponentSignatures[entityID][componentType]; !exists {
+	if _, exists := em.entityComponentSignatures[entityID][reflect.TypeOf(componentType)]; !exists {
 		return false
 	}
 
@@ -58,26 +58,28 @@ func (em *EntityManager) Remove(entityID EntityID) {
 	delete(em.entities, entityID)
 }
 
-func (em *EntityManager) RemoveComponent(entityID EntityID, componentType reflect.Type) {
+func (em *EntityManager) RemoveComponent(entityID EntityID, componentType any) {
 	if _, exists := em.entities[entityID]; !exists {
 		return
 	}
 
-	if _, exists := em.entityComponentSignatures[entityID][componentType]; !exists {
+	refType := reflect.TypeOf(componentType)
+
+	if _, exists := em.entityComponentSignatures[entityID][refType]; !exists {
 		return
 	}
 
-	container, exists := em.componentContainers[componentType]
+	container, exists := em.componentContainers[refType]
 	if !exists {
 		return
 	}
 
 	container.Remove(entityID)
-	delete(em.entityComponentSignatures[entityID], componentType)
+	delete(em.entityComponentSignatures[entityID], refType)
 }
 
 // Query returns a sequence of EntityIDs that match the specified component types.
-func (em *EntityManager) Query(componentTypes ...reflect.Type) iter.Seq[EntityID] {
+func (em *EntityManager) Query(componentTypes ...any) iter.Seq[EntityID] {
 	zeroIter := func(yield func(EntityID) bool) {}
 
 	if len(componentTypes) == 0 {
@@ -86,7 +88,7 @@ func (em *EntityManager) Query(componentTypes ...reflect.Type) iter.Seq[EntityID
 
 	// If only one component type is specified, return entities with that component
 	if len(componentTypes) == 1 {
-		componentContainer, exists := em.componentContainers[componentTypes[0]]
+		componentContainer, exists := em.componentContainers[reflect.TypeOf(componentTypes[0])]
 		if !exists {
 			return zeroIter
 		}
@@ -97,7 +99,7 @@ func (em *EntityManager) Query(componentTypes ...reflect.Type) iter.Seq[EntityID
 	// Pre-check: if any component type doesn't exist, return empty iterator
 	containers := make([]*ComponentContainer, len(componentTypes))
 	for i, componentType := range componentTypes {
-		container, exists := em.componentContainers[componentType]
+		container, exists := em.componentContainers[reflect.TypeOf(componentType)]
 		if !exists {
 			return zeroIter
 		}
@@ -198,25 +200,25 @@ func RemoveComponent[C any](em *EntityManager, entityID EntityID) {
 
 func Query[C any](em *EntityManager) iter.Seq[EntityID] {
 	var zero C
-	return em.Query(reflect.TypeOf(zero))
+	return em.Query(zero)
 }
 
 func Query2[C1, C2 any](em *EntityManager) iter.Seq[EntityID] {
 	var zero1 C1
 	var zero2 C2
-	return em.Query(reflect.TypeOf(zero1), reflect.TypeOf(zero2))
+	return em.Query(zero1, zero2)
 }
 
 func Query3[C1, C2, C3 any](em *EntityManager) iter.Seq[EntityID] {
 	var zero1 C1
 	var zero2 C2
 	var zero3 C3
-	return em.Query(reflect.TypeOf(zero1), reflect.TypeOf(zero2), reflect.TypeOf(zero3))
+	return em.Query(zero1, zero2, zero3)
 }
 
 func HasComponent[C any](em *EntityManager, entityID EntityID) bool {
 	var zero C
-	return em.HasComponent(entityID, reflect.TypeOf(zero))
+	return em.HasComponent(entityID, zero)
 }
 
 func GetComponent[C any](em *EntityManager, entityID EntityID) (*C, bool) {
