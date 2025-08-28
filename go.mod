@@ -4,7 +4,6 @@ go 1.25.0
 
 require (
 	github.com/hajimehoshi/ebiten/v2 v2.8.8
-	github.com/samix73/game v0.0.0-20250824114146-4994c6e70ba9
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/image v0.30.0
 )
