@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/samix73/game/ecs"
+	ecs "github.com/samix73/ebiten-ecs"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/image/math/f64"
 )
