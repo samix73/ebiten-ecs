@@ -267,3 +267,96 @@ func First(iterator iter.Seq[EntityID]) (EntityID, bool) {
 func Count(it iter.Seq[EntityID]) int {
 	return len(slices.Collect(it))
 }
+
+// QueryWith returns entities with component C that match the given filters
+func QueryWith[C any](em *EntityManager, filters ...Filter[C]) iter.Seq[EntityID] {
+	if len(filters) == 0 {
+		return Query[C](em)
+	}
+
+	return func(yield func(EntityID) bool) {
+		for entityID := range Query[C](em) {
+			component, ok := GetComponent[C](em, entityID)
+			if !ok {
+				continue
+			}
+
+			// Apply all filters
+			matches := true
+			for _, filter := range filters {
+				if !filter(component) {
+					matches = false
+					break
+				}
+			}
+
+			if matches {
+				if !yield(entityID) {
+					break
+				}
+			}
+		}
+	}
+}
+
+// QueryWith2 returns entities with components C1, C2 and filters applied to C1
+func QueryWith2[C1, C2 any](em *EntityManager, filters ...Filter[C1]) iter.Seq[EntityID] {
+	if len(filters) == 0 {
+		return Query2[C1, C2](em)
+	}
+
+	return func(yield func(EntityID) bool) {
+		for entityID := range Query2[C1, C2](em) {
+			component, ok := GetComponent[C1](em, entityID)
+			if !ok {
+				continue
+			}
+
+			// Apply all filters
+			matches := true
+			for _, filter := range filters {
+				if !filter(component) {
+					matches = false
+					break
+				}
+			}
+
+			if matches {
+				if !yield(entityID) {
+					break
+				}
+			}
+		}
+	}
+}
+
+// QueryWith3 returns entities with components C1, C2, C3 and filters applied to C1
+func QueryWith3[C1, C2, C3 any](em *EntityManager, filters ...Filter[C1]) iter.Seq[EntityID] {
+	if len(filters) == 0 {
+		return Query3[C1, C2, C3](em)
+	}
+
+	return func(yield func(EntityID) bool) {
+		for entityID := range Query3[C1, C2, C3](em) {
+			component, ok := GetComponent[C1](em, entityID)
+			if !ok {
+				continue
+			}
+
+			// Apply all filters
+			matches := true
+			for _, filter := range filters {
+				if !filter(component) {
+					matches = false
+					break
+				}
+			}
+
+			if matches {
+				if !yield(entityID) {
+					break
+				}
+			}
+		}
+	}
+}
