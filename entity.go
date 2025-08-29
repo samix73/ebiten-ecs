@@ -268,8 +268,8 @@ func Count(it iter.Seq[EntityID]) int {
 	return len(slices.Collect(it))
 }
 
-func evaluateFilters[C any](em *EntityManager, entityID EntityID, filters ...Filter[C]) bool {
-	if len(filters) == 0 {
+func evaluateFilter[C any](em *EntityManager, entityID EntityID, filter Filter[C]) bool {
+	if filter == nil {
 		return true
 	}
 
@@ -278,24 +278,18 @@ func evaluateFilters[C any](em *EntityManager, entityID EntityID, filters ...Fil
 		return false
 	}
 
-	for _, filter := range filters {
-		if !filter(component) {
-			return false
-		}
-	}
-
-	return true
+	return filter(component)
 }
 
 // QueryWith returns entities with component C that match the given filters
-func QueryWith[C any](em *EntityManager, filters ...Filter[C]) iter.Seq[EntityID] {
-	if len(filters) == 0 {
+func QueryWith[C any](em *EntityManager, filter Filter[C]) iter.Seq[EntityID] {
+	if filter == nil {
 		return Query[C](em)
 	}
 
 	return func(yield func(EntityID) bool) {
 		for entityID := range Query[C](em) {
-			if evaluateFilters(em, entityID, filters...) {
+			if evaluateFilter(em, entityID, filter) {
 				if !yield(entityID) {
 					break
 				}
@@ -305,15 +299,14 @@ func QueryWith[C any](em *EntityManager, filters ...Filter[C]) iter.Seq[EntityID
 }
 
 // QueryWith2 returns entities with components C1, C2 and filters applied to both component types
-func QueryWith2[C1, C2 any](em *EntityManager, filters1 []Filter[C1], filters2 []Filter[C2]) iter.Seq[EntityID] {
-	if len(filters1) == 0 && len(filters2) == 0 {
+func QueryWith2[C1, C2 any](em *EntityManager, filter1 Filter[C1], filter2 Filter[C2]) iter.Seq[EntityID] {
+	if filter1 == nil && filter2 == nil {
 		return Query2[C1, C2](em)
 	}
 
 	return func(yield func(EntityID) bool) {
 		for entityID := range Query2[C1, C2](em) {
-			if evaluateFilters(em, entityID, filters1...) &&
-				evaluateFilters(em, entityID, filters2...) {
+			if evaluateFilter(em, entityID, filter1) && evaluateFilter(em, entityID, filter2) {
 				if !yield(entityID) {
 					break
 				}
@@ -323,16 +316,16 @@ func QueryWith2[C1, C2 any](em *EntityManager, filters1 []Filter[C1], filters2 [
 }
 
 // QueryWith3 returns entities with components C1, C2, C3 and filters applied to all component types
-func QueryWith3[C1, C2, C3 any](em *EntityManager, filters1 []Filter[C1], filters2 []Filter[C2], filters3 []Filter[C3]) iter.Seq[EntityID] {
-	if len(filters1) == 0 && len(filters2) == 0 && len(filters3) == 0 {
+func QueryWith3[C1, C2, C3 any](em *EntityManager, filter1 Filter[C1], filter2 Filter[C2], filter3 Filter[C3]) iter.Seq[EntityID] {
+	if filter1 == nil && filter2 == nil && filter3 == nil {
 		return Query3[C1, C2, C3](em)
 	}
 
 	return func(yield func(EntityID) bool) {
 		for entityID := range Query3[C1, C2, C3](em) {
-			if evaluateFilters(em, entityID, filters1...) &&
-				evaluateFilters(em, entityID, filters2...) &&
-				evaluateFilters(em, entityID, filters3...) {
+			if evaluateFilter(em, entityID, filter1) &&
+				evaluateFilter(em, entityID, filter2) &&
+				evaluateFilter(em, entityID, filter3) {
 				if !yield(entityID) {
 					break
 				}
