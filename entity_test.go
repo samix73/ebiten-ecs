@@ -81,6 +81,101 @@ func TestEntityCreation(t *testing.T) {
 	assert.NotEqual(t, empty, ecs.UndefinedID)
 }
 
+func TestFilteredQueries(t *testing.T) {
+	em := ecs.NewEntityManager()
+
+	// Create entities with different zoom levels
+	entity1 := em.NewEntity()
+	camera1 := ecs.AddComponent[CameraComponent](em, entity1)
+	camera1.Zoom = 2.0
+
+	entity2 := em.NewEntity()
+	camera2 := ecs.AddComponent[CameraComponent](em, entity2)
+	camera2.Zoom = 0.5
+
+	entity3 := em.NewEntity()
+	camera3 := ecs.AddComponent[CameraComponent](em, entity3)
+	camera3.Zoom = 1.5
+
+	// Test basic filtering
+	highZoomFilter := ecs.Where(func(c *CameraComponent) bool {
+		return c.Zoom > 1.0
+	})
+
+	var highZoomEntities []ecs.EntityID
+	for entityID := range ecs.QueryWith(em, highZoomFilter) {
+		highZoomEntities = append(highZoomEntities, entityID)
+	}
+
+	assert.Len(t, highZoomEntities, 2)
+	assert.Contains(t, highZoomEntities, entity1)
+	assert.Contains(t, highZoomEntities, entity3)
+	assert.NotContains(t, highZoomEntities, entity2)
+
+	// Test that QueryWith without filters returns all entities
+	var allCameras []ecs.EntityID
+	for entityID := range ecs.QueryWith[CameraComponent](em) {
+		allCameras = append(allCameras, entityID)
+	}
+	assert.Len(t, allCameras, 3)
+
+	// Test complex filter combinations
+	lowZoom := ecs.Where(func(c *CameraComponent) bool { return c.Zoom < 0.8 })
+	extremeZoom := ecs.Or(highZoomFilter, lowZoom)
+
+	var extremeEntities []ecs.EntityID
+	for entityID := range ecs.QueryWith(em, extremeZoom) {
+		extremeEntities = append(extremeEntities, entityID)
+	}
+
+	assert.Len(t, extremeEntities, 3) // All entities have either high or low zoom
+}
+
+func TestSpatialFiltering(t *testing.T) {
+	em := ecs.NewEntityManager()
+
+	// Create entities at different positions
+	entity1 := em.NewEntity()
+	transform1 := ecs.AddComponent[TransformComponent](em, entity1)
+	transform1.Position = f64.Vec2{2, 3}
+
+	entity2 := em.NewEntity()
+	transform2 := ecs.AddComponent[TransformComponent](em, entity2)
+	transform2.Position = f64.Vec2{8, 2}
+
+	entity3 := em.NewEntity()
+	transform3 := ecs.AddComponent[TransformComponent](em, entity3)
+	transform3.Position = f64.Vec2{1, 1}
+
+	// Test spatial filtering using the helpers
+	boundsFilter := ecs.Where(func(t *TransformComponent) bool {
+		return ecs.WithinBoundsCheck(t.Position, 0, 0, 5, 5)
+	})
+
+	var entitiesInBounds []ecs.EntityID
+	for entityID := range ecs.QueryWith(em, boundsFilter) {
+		entitiesInBounds = append(entitiesInBounds, entityID)
+	}
+
+	assert.Len(t, entitiesInBounds, 2) // entities 1 and 3 are within bounds
+	assert.Contains(t, entitiesInBounds, entity1)
+	assert.Contains(t, entitiesInBounds, entity3)
+	assert.NotContains(t, entitiesInBounds, entity2)
+
+	// Test radius filtering
+	radiusFilter := ecs.Where(func(t *TransformComponent) bool {
+		return ecs.WithinRadiusCheck(t.Position, 0, 0, 4)
+	})
+
+	var entitiesInRadius []ecs.EntityID
+	for entityID := range ecs.QueryWith(em, radiusFilter) {
+		entitiesInRadius = append(entitiesInRadius, entityID)
+	}
+
+	assert.Len(t, entitiesInRadius, 1) // Only entity3 at (1,1) is within radius 4 of origin
+	assert.Contains(t, entitiesInRadius, entity3)
+}
+
 func BenchmarkQueryEntities(b *testing.B) {
 	em := ecs.NewEntityManager()
 
@@ -147,6 +242,85 @@ func BenchmarkQueryEntities(b *testing.B) {
 				if _, ok := ecs.GetComponent[CameraComponent](em, entityID); !ok {
 					b.Fatalf("Expected component for entity %d", entityID)
 				}
+			}
+		}
+	})
+}
+
+func BenchmarkFilteredQueries(b *testing.B) {
+	em := ecs.NewEntityManager()
+
+	// Create entities with varying zoom levels
+	for i := 0; i < 1_000_000; i++ {
+		entity := em.NewEntity()
+		camera := ecs.AddComponent[CameraComponent](em, entity)
+		// Create a distribution: 50% high zoom (>1.0), 50% low zoom (<=1.0)
+		if i%2 == 0 {
+			camera.Zoom = 2.0
+		} else {
+			camera.Zoom = 0.5
+		}
+	}
+
+	// Benchmark different filtering scenarios
+	highZoomFilter := ecs.Where(func(c *CameraComponent) bool {
+		return c.Zoom > 1.0
+	})
+
+	b.Run("QueryWith Filter", func(b *testing.B) {
+		for b.Loop() {
+			count := 0
+			for entityID := range ecs.QueryWith(em, highZoomFilter) {
+				count++
+				_ = entityID
+			}
+			if count != 500_000 {
+				b.Fatalf("Expected 500k entities, got %d", count)
+			}
+		}
+	})
+
+	b.Run("QueryWith No Filter", func(b *testing.B) {
+		for b.Loop() {
+			count := 0
+			for entityID := range ecs.QueryWith[CameraComponent](em) {
+				count++
+				_ = entityID
+			}
+			if count != 1_000_000 {
+				b.Fatalf("Expected 1M entities, got %d", count)
+			}
+		}
+	})
+
+	b.Run("Regular Query (baseline)", func(b *testing.B) {
+		for b.Loop() {
+			count := 0
+			for entityID := range ecs.Query[CameraComponent](em) {
+				count++
+				_ = entityID
+			}
+			if count != 1_000_000 {
+				b.Fatalf("Expected 1M entities, got %d", count)
+			}
+		}
+	})
+
+	// Complex filter benchmark
+	complexFilter := ecs.And(
+		ecs.Where(func(c *CameraComponent) bool { return c.Zoom > 0.1 }),
+		ecs.Where(func(c *CameraComponent) bool { return c.Zoom < 10.0 }),
+	)
+
+	b.Run("QueryWith Complex Filter", func(b *testing.B) {
+		for b.Loop() {
+			count := 0
+			for entityID := range ecs.QueryWith(em, complexFilter) {
+				count++
+				_ = entityID
+			}
+			if count != 1_000_000 {
+				b.Fatalf("Expected 1M entities, got %d", count)
 			}
 		}
 	})

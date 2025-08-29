@@ -5,6 +5,7 @@ A lightweight, generic, allocation–friendly Entity Component System (ECS) buil
 - Entity + component storage with pooling ([`ecs.ComponentContainer`](component.go))
 - Generic helpers for adding and querying components ([`ecs.AddComponent`](entity.go), [`ecs.Query`](entity.go), [`ecs.Query2`](entity.go), [`ecs.GetComponent`](entity.go))
 - Cache‑friendly multi-component querying
+- **Flexible filtering system with `QueryWith` functions ([`filter.go`](filter.go), [`spatial.go`](spatial.go))**
 - Systems with priorities and optional rendering phase ([`ecs.System`](system.go), [`ecs.RendererSystem`](system.go))
 - Worlds to scope game states/scenes ([`ecs.World`](world.go), [`ecs.BaseWorld`](world.go))
 - A thin wrapper over Ebiten’s game loop ([`ecs.Game`](game.go), [`ecs.GameConfig`](game.go))
@@ -132,6 +133,66 @@ for e := range ecs.Query[Transform](em) { /* ... */ }
 for e := range ecs.Query2[Transform, AnotherComponent](em) { /* ... */ }
 tr, ok := ecs.GetComponent[Transform](em, e)
 ```
+
+## Filtering
+
+The ECS supports flexible filtering of query results using the `QueryWith` family of functions:
+
+```go
+// Basic filtering with Where()
+highZoomFilter := ecs.Where(func(c *CameraComponent) bool { 
+    return c.Zoom > 1.0 
+})
+
+for entityID := range ecs.QueryWith(em, highZoomFilter) {
+    camera := ecs.MustGetComponent[CameraComponent](em, entityID)
+    // Process high-zoom cameras
+}
+
+// Multi-component queries with filtering (applied to first component)
+for entityID := range ecs.QueryWith2[CameraComponent, Transform](em, highZoomFilter) {
+    // Process entities with both Camera and Transform, where Camera.Zoom > 1.0
+}
+
+// Combining filters with logical operators
+lowZoom := ecs.Where(func(c *CameraComponent) bool { return c.Zoom < 0.5 })
+extremeZoom := ecs.Or(highZoomFilter, lowZoom)
+
+for entityID := range ecs.QueryWith(em, extremeZoom) {
+    // Process cameras with extreme zoom levels (very high or very low)
+}
+
+// Spatial filtering helpers
+boundsFilter := ecs.Where(func(t *Transform) bool {
+    return ecs.WithinBoundsCheck(t.Position, 0, 0, 100, 100)
+})
+
+radiusFilter := ecs.Where(func(t *Transform) bool {
+    return ecs.WithinRadiusCheck(t.Position, 50, 50, 25)
+})
+
+// Complex filter combinations
+complexFilter := ecs.And(
+    ecs.Where(func(c *CameraComponent) bool { return c.Zoom > 1.0 }),
+    ecs.Not(ecs.Where(func(c *CameraComponent) bool { return c.FOV > 90 }))
+)
+```
+
+### Filter Functions
+
+- **`Where(predicate)`**: Creates a filter from a predicate function
+- **`And(filters...)`**: Combines filters with logical AND  
+- **`Or(filters...)`**: Combines filters with logical OR
+- **`Not(filter)`**: Negates a filter
+- **`WithinBoundsCheck(pos, minX, minY, maxX, maxY)`**: Spatial bounds checking
+- **`WithinRadiusCheck(pos, centerX, centerY, radius)`**: Spatial radius checking
+
+### Performance
+
+Filtering maintains the same performance characteristics as regular queries by:
+- Using the existing query optimization (smallest component container first)
+- Applying filters only after component type matching
+- Supporting efficient early termination with iterator patterns
 
 ## Performance
 
