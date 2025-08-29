@@ -406,30 +406,3 @@ func QueryWith3[C1, C2, C3 any](em *EntityManager, filters1 []Filter[C1], filter
 		}
 	}
 }
-
-// Helper functions for more convenient API usage
-
-// QueryWith2_C1 filters only on the first component type
-func QueryWith2_C1[C1, C2 any](em *EntityManager, filters ...Filter[C1]) iter.Seq[EntityID] {
-	return QueryWith2[C1, C2](em, filters, []Filter[C2]{})
-}
-
-// QueryWith2_C2 filters only on the second component type
-func QueryWith2_C2[C1, C2 any](em *EntityManager, filters ...Filter[C2]) iter.Seq[EntityID] {
-	return QueryWith2[C1, C2](em, []Filter[C1]{}, filters)
-}
-
-// QueryWith3_C1 filters only on the first component type
-func QueryWith3_C1[C1, C2, C3 any](em *EntityManager, filters ...Filter[C1]) iter.Seq[EntityID] {
-	return QueryWith3[C1, C2, C3](em, filters, []Filter[C2]{}, []Filter[C3]{})
-}
-
-// QueryWith3_C2 filters only on the second component type
-func QueryWith3_C2[C1, C2, C3 any](em *EntityManager, filters ...Filter[C2]) iter.Seq[EntityID] {
-	return QueryWith3[C1, C2, C3](em, []Filter[C1]{}, filters, []Filter[C3]{})
-}
-
-// QueryWith3_C3 filters only on the third component type
-func QueryWith3_C3[C1, C2, C3 any](em *EntityManager, filters ...Filter[C3]) iter.Seq[EntityID] {
-	return QueryWith3[C1, C2, C3](em, []Filter[C1]{}, []Filter[C2]{}, filters)
-}
