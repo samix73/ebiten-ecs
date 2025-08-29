@@ -268,6 +268,25 @@ func Count(it iter.Seq[EntityID]) int {
 	return len(slices.Collect(it))
 }
 
+func evaluateFilters[C any](em *EntityManager, entityID EntityID, filters ...Filter[C]) bool {
+	if len(filters) == 0 {
+		return true
+	}
+
+	component, ok := GetComponent[C](em, entityID)
+	if !ok {
+		return false
+	}
+
+	for _, filter := range filters {
+		if !filter(component) {
+			return false
+		}
+	}
+
+	return true
+}
+
 // QueryWith returns entities with component C that match the given filters
 func QueryWith[C any](em *EntityManager, filters ...Filter[C]) iter.Seq[EntityID] {
 	if len(filters) == 0 {
@@ -276,21 +295,7 @@ func QueryWith[C any](em *EntityManager, filters ...Filter[C]) iter.Seq[EntityID
 
 	return func(yield func(EntityID) bool) {
 		for entityID := range Query[C](em) {
-			component, ok := GetComponent[C](em, entityID)
-			if !ok {
-				continue
-			}
-
-			// Apply all filters
-			matches := true
-			for _, filter := range filters {
-				if !filter(component) {
-					matches = false
-					break
-				}
-			}
-
-			if matches {
+			if evaluateFilters(em, entityID, filters...) {
 				if !yield(entityID) {
 					break
 				}
@@ -307,37 +312,8 @@ func QueryWith2[C1, C2 any](em *EntityManager, filters1 []Filter[C1], filters2 [
 
 	return func(yield func(EntityID) bool) {
 		for entityID := range Query2[C1, C2](em) {
-			matches := true
-
-			// Apply C1 filters if any
-			if len(filters1) > 0 {
-				component1, ok := GetComponent[C1](em, entityID)
-				if !ok {
-					continue
-				}
-				for _, filter := range filters1 {
-					if !filter(component1) {
-						matches = false
-						break
-					}
-				}
-			}
-
-			// Apply C2 filters if any and C1 filters passed
-			if matches && len(filters2) > 0 {
-				component2, ok := GetComponent[C2](em, entityID)
-				if !ok {
-					continue
-				}
-				for _, filter := range filters2 {
-					if !filter(component2) {
-						matches = false
-						break
-					}
-				}
-			}
-
-			if matches {
+			if evaluateFilters(em, entityID, filters1...) &&
+				evaluateFilters(em, entityID, filters2...) {
 				if !yield(entityID) {
 					break
 				}
@@ -354,51 +330,9 @@ func QueryWith3[C1, C2, C3 any](em *EntityManager, filters1 []Filter[C1], filter
 
 	return func(yield func(EntityID) bool) {
 		for entityID := range Query3[C1, C2, C3](em) {
-			matches := true
-
-			// Apply C1 filters if any
-			if len(filters1) > 0 {
-				component1, ok := GetComponent[C1](em, entityID)
-				if !ok {
-					continue
-				}
-				for _, filter := range filters1 {
-					if !filter(component1) {
-						matches = false
-						break
-					}
-				}
-			}
-
-			// Apply C2 filters if any and C1 filters passed
-			if matches && len(filters2) > 0 {
-				component2, ok := GetComponent[C2](em, entityID)
-				if !ok {
-					continue
-				}
-				for _, filter := range filters2 {
-					if !filter(component2) {
-						matches = false
-						break
-					}
-				}
-			}
-
-			// Apply C3 filters if any and previous filters passed
-			if matches && len(filters3) > 0 {
-				component3, ok := GetComponent[C3](em, entityID)
-				if !ok {
-					continue
-				}
-				for _, filter := range filters3 {
-					if !filter(component3) {
-						matches = false
-						break
-					}
-				}
-			}
-
-			if matches {
+			if evaluateFilters(em, entityID, filters1...) &&
+				evaluateFilters(em, entityID, filters2...) &&
+				evaluateFilters(em, entityID, filters3...) {
 				if !yield(entityID) {
 					break
 				}
