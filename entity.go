@@ -299,25 +299,41 @@ func QueryWith[C any](em *EntityManager, filters ...Filter[C]) iter.Seq[EntityID
 	}
 }
 
-// QueryWith2 returns entities with components C1, C2 and filters applied to C1
-func QueryWith2[C1, C2 any](em *EntityManager, filters ...Filter[C1]) iter.Seq[EntityID] {
-	if len(filters) == 0 {
+// QueryWith2 returns entities with components C1, C2 and filters applied to both component types
+func QueryWith2[C1, C2 any](em *EntityManager, filters1 []Filter[C1], filters2 []Filter[C2]) iter.Seq[EntityID] {
+	if len(filters1) == 0 && len(filters2) == 0 {
 		return Query2[C1, C2](em)
 	}
 
 	return func(yield func(EntityID) bool) {
 		for entityID := range Query2[C1, C2](em) {
-			component, ok := GetComponent[C1](em, entityID)
-			if !ok {
-				continue
+			matches := true
+
+			// Apply C1 filters if any
+			if len(filters1) > 0 {
+				component1, ok := GetComponent[C1](em, entityID)
+				if !ok {
+					continue
+				}
+				for _, filter := range filters1 {
+					if !filter(component1) {
+						matches = false
+						break
+					}
+				}
 			}
 
-			// Apply all filters
-			matches := true
-			for _, filter := range filters {
-				if !filter(component) {
-					matches = false
-					break
+			// Apply C2 filters if any and C1 filters passed
+			if matches && len(filters2) > 0 {
+				component2, ok := GetComponent[C2](em, entityID)
+				if !ok {
+					continue
+				}
+				for _, filter := range filters2 {
+					if !filter(component2) {
+						matches = false
+						break
+					}
 				}
 			}
 
@@ -330,25 +346,55 @@ func QueryWith2[C1, C2 any](em *EntityManager, filters ...Filter[C1]) iter.Seq[E
 	}
 }
 
-// QueryWith3 returns entities with components C1, C2, C3 and filters applied to C1
-func QueryWith3[C1, C2, C3 any](em *EntityManager, filters ...Filter[C1]) iter.Seq[EntityID] {
-	if len(filters) == 0 {
+// QueryWith3 returns entities with components C1, C2, C3 and filters applied to all component types
+func QueryWith3[C1, C2, C3 any](em *EntityManager, filters1 []Filter[C1], filters2 []Filter[C2], filters3 []Filter[C3]) iter.Seq[EntityID] {
+	if len(filters1) == 0 && len(filters2) == 0 && len(filters3) == 0 {
 		return Query3[C1, C2, C3](em)
 	}
 
 	return func(yield func(EntityID) bool) {
 		for entityID := range Query3[C1, C2, C3](em) {
-			component, ok := GetComponent[C1](em, entityID)
-			if !ok {
-				continue
+			matches := true
+
+			// Apply C1 filters if any
+			if len(filters1) > 0 {
+				component1, ok := GetComponent[C1](em, entityID)
+				if !ok {
+					continue
+				}
+				for _, filter := range filters1 {
+					if !filter(component1) {
+						matches = false
+						break
+					}
+				}
 			}
 
-			// Apply all filters
-			matches := true
-			for _, filter := range filters {
-				if !filter(component) {
-					matches = false
-					break
+			// Apply C2 filters if any and C1 filters passed
+			if matches && len(filters2) > 0 {
+				component2, ok := GetComponent[C2](em, entityID)
+				if !ok {
+					continue
+				}
+				for _, filter := range filters2 {
+					if !filter(component2) {
+						matches = false
+						break
+					}
+				}
+			}
+
+			// Apply C3 filters if any and previous filters passed
+			if matches && len(filters3) > 0 {
+				component3, ok := GetComponent[C3](em, entityID)
+				if !ok {
+					continue
+				}
+				for _, filter := range filters3 {
+					if !filter(component3) {
+						matches = false
+						break
+					}
 				}
 			}
 
@@ -359,4 +405,31 @@ func QueryWith3[C1, C2, C3 any](em *EntityManager, filters ...Filter[C1]) iter.S
 			}
 		}
 	}
+}
+
+// Helper functions for more convenient API usage
+
+// QueryWith2_C1 filters only on the first component type
+func QueryWith2_C1[C1, C2 any](em *EntityManager, filters ...Filter[C1]) iter.Seq[EntityID] {
+	return QueryWith2[C1, C2](em, filters, []Filter[C2]{})
+}
+
+// QueryWith2_C2 filters only on the second component type
+func QueryWith2_C2[C1, C2 any](em *EntityManager, filters ...Filter[C2]) iter.Seq[EntityID] {
+	return QueryWith2[C1, C2](em, []Filter[C1]{}, filters)
+}
+
+// QueryWith3_C1 filters only on the first component type
+func QueryWith3_C1[C1, C2, C3 any](em *EntityManager, filters ...Filter[C1]) iter.Seq[EntityID] {
+	return QueryWith3[C1, C2, C3](em, filters, []Filter[C2]{}, []Filter[C3]{})
+}
+
+// QueryWith3_C2 filters only on the second component type
+func QueryWith3_C2[C1, C2, C3 any](em *EntityManager, filters ...Filter[C2]) iter.Seq[EntityID] {
+	return QueryWith3[C1, C2, C3](em, []Filter[C1]{}, filters, []Filter[C3]{})
+}
+
+// QueryWith3_C3 filters only on the third component type
+func QueryWith3_C3[C1, C2, C3 any](em *EntityManager, filters ...Filter[C3]) iter.Seq[EntityID] {
+	return QueryWith3[C1, C2, C3](em, []Filter[C1]{}, []Filter[C2]{}, filters)
 }

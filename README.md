@@ -136,7 +136,7 @@ tr, ok := ecs.GetComponent[Transform](em, e)
 
 ## Filtering
 
-The ECS supports flexible filtering of query results using the `QueryWith` family of functions:
+The ECS supports flexible filtering of query results using the `QueryWith` family of functions. You can now filter on **any or all component types** in multi-component queries:
 
 ```go
 // Basic filtering with Where()
@@ -149,9 +149,34 @@ for entityID := range ecs.QueryWith(em, highZoomFilter) {
     // Process high-zoom cameras
 }
 
-// Multi-component queries with filtering (applied to first component)
-for entityID := range ecs.QueryWith2[CameraComponent, Transform](em, highZoomFilter) {
-    // Process entities with both Camera and Transform, where Camera.Zoom > 1.0
+// Multi-component filtering on ANY component type
+// Filter on first component type (Camera)
+for entityID := range ecs.QueryWith2_C1[CameraComponent, Transform](em, highZoomFilter) {
+    // Process entities where Camera.Zoom > 1.0
+}
+
+// Filter on second component type (Transform)  
+boundsFilter := ecs.Where(func(t *Transform) bool {
+    return t.X >= 0 && t.X <= 100 && t.Y >= 0 && t.Y <= 100
+})
+for entityID := range ecs.QueryWith2_C2[CameraComponent, Transform](em, boundsFilter) {
+    // Process entities where Transform is within bounds
+}
+
+// Filter on BOTH component types simultaneously
+for entityID := range ecs.QueryWith2[CameraComponent, Transform](em, 
+    []ecs.Filter[CameraComponent]{highZoomFilter}, 
+    []ecs.Filter[Transform]{boundsFilter}) {
+    // Process entities where Camera.Zoom > 1.0 AND Transform is within bounds
+}
+
+// Three-component filtering on any combination
+speedFilter := ecs.Where(func(v *Velocity) bool { return v.Speed > 10.0 })
+for entityID := range ecs.QueryWith3[CameraComponent, Transform, Velocity](em,
+    []ecs.Filter[CameraComponent]{highZoomFilter},     // Camera filters
+    []ecs.Filter[Transform]{boundsFilter},             // Transform filters  
+    []ecs.Filter[Velocity]{speedFilter}) {             // Velocity filters
+    // All three component types must pass their respective filters
 }
 
 // Combining filters with logical operators
@@ -163,7 +188,7 @@ for entityID := range ecs.QueryWith(em, extremeZoom) {
 }
 
 // Spatial filtering helpers
-boundsFilter := ecs.Where(func(t *Transform) bool {
+spatialFilter := ecs.Where(func(t *Transform) bool {
     return ecs.WithinBoundsCheck(t.Position, 0, 0, 100, 100)
 })
 
@@ -180,10 +205,23 @@ complexFilter := ecs.And(
 
 ### Filter Functions
 
+**Core Filter Operations:**
 - **`Where(predicate)`**: Creates a filter from a predicate function
 - **`And(filters...)`**: Combines filters with logical AND  
 - **`Or(filters...)`**: Combines filters with logical OR
 - **`Not(filter)`**: Negates a filter
+
+**Multi-Component Query Functions:**
+- **`QueryWith[C](em, filters...)`**: Filter entities with component C
+- **`QueryWith2[C1, C2](em, filters1, filters2)`**: Filter entities with components C1 and C2 on both types
+- **`QueryWith2_C1[C1, C2](em, filters...)`**: Filter entities with C1 and C2, filtering only on C1
+- **`QueryWith2_C2[C1, C2](em, filters...)`**: Filter entities with C1 and C2, filtering only on C2
+- **`QueryWith3[C1, C2, C3](em, filters1, filters2, filters3)`**: Filter entities with three components on all types
+- **`QueryWith3_C1[C1, C2, C3](em, filters...)`**: Filter entities with three components, filtering only on C1
+- **`QueryWith3_C2[C1, C2, C3](em, filters...)`**: Filter entities with three components, filtering only on C2  
+- **`QueryWith3_C3[C1, C2, C3](em, filters...)`**: Filter entities with three components, filtering only on C3
+
+**Spatial Helpers:**
 - **`WithinBoundsCheck(pos, minX, minY, maxX, maxY)`**: Spatial bounds checking
 - **`WithinRadiusCheck(pos, centerX, centerY, radius)`**: Spatial radius checking
 

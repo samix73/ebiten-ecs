@@ -128,7 +128,7 @@ func TestQueryWith2(t *testing.T) {
 	})
 
 	var filteredEntities []ecs.EntityID
-	for entityID := range ecs.QueryWith2[CameraComponent, TransformComponent](em, highZoomFilter) {
+	for entityID := range ecs.QueryWith2_C1[CameraComponent, TransformComponent](em, highZoomFilter) {
 		filteredEntities = append(filteredEntities, entityID)
 	}
 
@@ -165,7 +165,7 @@ func TestQueryWith3(t *testing.T) {
 	})
 
 	var filteredEntities []ecs.EntityID
-	for entityID := range ecs.QueryWith3[CameraComponent, TransformComponent, VelocityComponent](em, highZoomFilter) {
+	for entityID := range ecs.QueryWith3_C1[CameraComponent, TransformComponent, VelocityComponent](em, highZoomFilter) {
 		filteredEntities = append(filteredEntities, entityID)
 	}
 
@@ -238,4 +238,222 @@ func TestSpatialFilterIntegration(t *testing.T) {
 	assert.Len(t, entitiesInBounds, 2)
 	assert.Contains(t, entitiesInBounds, entities[0]) // (2,3)
 	assert.Contains(t, entitiesInBounds, entities[2]) // (1,1)
+}
+
+// TestMultiComponentFiltering tests the new multi-component filtering capability
+func TestMultiComponentFiltering(t *testing.T) {
+	em := ecs.NewEntityManager()
+
+	// Create a velocity component type for testing
+	type VelocityComponent struct {
+		Speed float64
+	}
+
+	// Create entities with different combinations of components and values
+	entity1 := em.NewEntity()
+	camera1 := ecs.AddComponent[CameraComponent](em, entity1)
+	camera1.Zoom = 2.0
+	transform1 := ecs.AddComponent[TransformComponent](em, entity1)
+	transform1.Position = f64.Vec2{5, 5}
+
+	entity2 := em.NewEntity()
+	camera2 := ecs.AddComponent[CameraComponent](em, entity2)
+	camera2.Zoom = 0.5
+	transform2 := ecs.AddComponent[TransformComponent](em, entity2)
+	transform2.Position = f64.Vec2{15, 15}
+
+	entity3 := em.NewEntity()
+	camera3 := ecs.AddComponent[CameraComponent](em, entity3)
+	camera3.Zoom = 3.0
+	transform3 := ecs.AddComponent[TransformComponent](em, entity3)
+	transform3.Position = f64.Vec2{2, 2}
+
+	// Test filtering on both component types
+	highZoomFilter := ecs.Where(func(c *CameraComponent) bool { return c.Zoom > 1.0 })
+	inBoundsFilter := ecs.Where(func(t *TransformComponent) bool {
+		return t.Position.X < 10 && t.Position.Y < 10
+	})
+
+	// Test QueryWith2 filtering on both C1 and C2
+	var filteredEntities []ecs.EntityID
+	for entityID := range ecs.QueryWith2[CameraComponent, TransformComponent](em, []ecs.Filter[CameraComponent]{highZoomFilter}, []ecs.Filter[TransformComponent]{inBoundsFilter}) {
+		filteredEntities = append(filteredEntities, entityID)
+	}
+
+	// Should match entity1 (zoom=2.0, pos=(5,5)) and entity3 (zoom=3.0, pos=(2,2))
+	// Should NOT match entity2 (zoom=0.5 - fails zoom filter)
+	assert.Len(t, filteredEntities, 2)
+	assert.Contains(t, filteredEntities, entity1)
+	assert.Contains(t, filteredEntities, entity3)
+	assert.NotContains(t, filteredEntities, entity2)
+}
+
+// TestQueryWith2FilteringOnSecondComponent tests filtering only on the second component type
+func TestQueryWith2FilteringOnSecondComponent(t *testing.T) {
+	em := ecs.NewEntityManager()
+
+	// Create entities
+	entity1 := em.NewEntity()
+	camera1 := ecs.AddComponent[CameraComponent](em, entity1)
+	camera1.Zoom = 0.5
+	transform1 := ecs.AddComponent[TransformComponent](em, entity1)
+	transform1.Position = f64.Vec2{5, 5}
+
+	entity2 := em.NewEntity()
+	camera2 := ecs.AddComponent[CameraComponent](em, entity2)
+	camera2.Zoom = 2.0
+	transform2 := ecs.AddComponent[TransformComponent](em, entity2)
+	transform2.Position = f64.Vec2{15, 15}
+
+	// Filter only on transform position (second component), not on camera (first component)
+	inBoundsFilter := ecs.Where(func(t *TransformComponent) bool {
+		return t.Position.X < 10 && t.Position.Y < 10
+	})
+
+	var filteredEntities []ecs.EntityID
+	for entityID := range ecs.QueryWith2_C2[CameraComponent, TransformComponent](em, inBoundsFilter) {
+		filteredEntities = append(filteredEntities, entityID)
+	}
+
+	// Should match only entity1 (pos=(5,5) is within bounds)
+	// entity2 has pos=(15,15) which is outside bounds
+	assert.Len(t, filteredEntities, 1)
+	assert.Contains(t, filteredEntities, entity1)
+	assert.NotContains(t, filteredEntities, entity2)
+}
+
+// TestQueryWith3MultiComponentFiltering tests filtering on all three component types
+func TestQueryWith3MultiComponentFiltering(t *testing.T) {
+	em := ecs.NewEntityManager()
+
+	type VelocityComponent struct {
+		Speed float64
+	}
+
+	// Create entities with three components each
+	entity1 := em.NewEntity()
+	camera1 := ecs.AddComponent[CameraComponent](em, entity1)
+	camera1.Zoom = 2.0
+	transform1 := ecs.AddComponent[TransformComponent](em, entity1)
+	transform1.Position = f64.Vec2{5, 5}
+	velocity1 := ecs.AddComponent[VelocityComponent](em, entity1)
+	velocity1.Speed = 20.0
+
+	entity2 := em.NewEntity()
+	camera2 := ecs.AddComponent[CameraComponent](em, entity2)
+	camera2.Zoom = 3.0
+	transform2 := ecs.AddComponent[TransformComponent](em, entity2)
+	transform2.Position = f64.Vec2{2, 2}
+	velocity2 := ecs.AddComponent[VelocityComponent](em, entity2)
+	velocity2.Speed = 5.0
+
+	entity3 := em.NewEntity()
+	camera3 := ecs.AddComponent[CameraComponent](em, entity3)
+	camera3.Zoom = 1.5
+	transform3 := ecs.AddComponent[TransformComponent](em, entity3)
+	transform3.Position = f64.Vec2{8, 8}
+	velocity3 := ecs.AddComponent[VelocityComponent](em, entity3)
+	velocity3.Speed = 25.0
+
+	// Create filters for each component type
+	highZoomFilter := ecs.Where(func(c *CameraComponent) bool { return c.Zoom > 1.0 })
+	inBoundsFilter := ecs.Where(func(t *TransformComponent) bool {
+		return t.Position.X < 10 && t.Position.Y < 10
+	})
+	fastFilter := ecs.Where(func(v *VelocityComponent) bool { return v.Speed > 15.0 })
+
+	// Test QueryWith3 filtering on all three component types
+	var filteredEntities []ecs.EntityID
+	for entityID := range ecs.QueryWith3[CameraComponent, TransformComponent, VelocityComponent](em, 
+		[]ecs.Filter[CameraComponent]{highZoomFilter}, 
+		[]ecs.Filter[TransformComponent]{inBoundsFilter}, 
+		[]ecs.Filter[VelocityComponent]{fastFilter}) {
+		filteredEntities = append(filteredEntities, entityID)
+	}
+
+	// Should match entity1 (zoom=2.0>1.0, pos=(5,5)<10, speed=20.0>15.0) and entity3 (zoom=1.5>1.0, pos=(8,8)<10, speed=25.0>15.0)
+	// Should NOT match entity2 (speed=5.0 < 15.0 - fails speed filter)
+	assert.Len(t, filteredEntities, 2)
+	assert.Contains(t, filteredEntities, entity1)
+	assert.Contains(t, filteredEntities, entity3)
+	assert.NotContains(t, filteredEntities, entity2)
+}
+
+// TestEmptyFilterLists tests that empty filter lists work correctly (no filtering applied)
+func TestEmptyFilterLists(t *testing.T) {
+	em := ecs.NewEntityManager()
+
+	// Create some entities
+	entity1 := em.NewEntity()
+	ecs.AddComponent[CameraComponent](em, entity1)
+	ecs.AddComponent[TransformComponent](em, entity1)
+
+	entity2 := em.NewEntity()
+	ecs.AddComponent[CameraComponent](em, entity2)
+	ecs.AddComponent[TransformComponent](em, entity2)
+
+	// Test QueryWith2 with empty filter lists - should return all entities
+	var allEntities []ecs.EntityID
+	for entityID := range ecs.QueryWith2[CameraComponent, TransformComponent](em, []ecs.Filter[CameraComponent]{}, []ecs.Filter[TransformComponent]{}) {
+		allEntities = append(allEntities, entityID)
+	}
+
+	assert.Len(t, allEntities, 2)
+	assert.Contains(t, allEntities, entity1)
+	assert.Contains(t, allEntities, entity2)
+}
+
+// TestConvenienceHelpers tests the convenience helper functions
+func TestConvenienceHelpers(t *testing.T) {
+	em := ecs.NewEntityManager()
+
+	type VelocityComponent struct {
+		Speed float64
+	}
+
+	// Create test entities
+	entity1 := em.NewEntity()
+	camera1 := ecs.AddComponent[CameraComponent](em, entity1)
+	camera1.Zoom = 2.0
+	transform1 := ecs.AddComponent[TransformComponent](em, entity1)
+	transform1.Position = f64.Vec2{5, 5}
+	velocity1 := ecs.AddComponent[VelocityComponent](em, entity1)
+	velocity1.Speed = 20.0
+
+	entity2 := em.NewEntity()
+	camera2 := ecs.AddComponent[CameraComponent](em, entity2)
+	camera2.Zoom = 0.5
+	transform2 := ecs.AddComponent[TransformComponent](em, entity2)
+	transform2.Position = f64.Vec2{15, 15}
+	velocity2 := ecs.AddComponent[VelocityComponent](em, entity2)
+	velocity2.Speed = 5.0
+
+	// Test QueryWith2_C1 (filter on first component)
+	highZoomFilter := ecs.Where(func(c *CameraComponent) bool { return c.Zoom > 1.0 })
+	var c1FilteredEntities []ecs.EntityID
+	for entityID := range ecs.QueryWith2_C1[CameraComponent, TransformComponent](em, highZoomFilter) {
+		c1FilteredEntities = append(c1FilteredEntities, entityID)
+	}
+	assert.Len(t, c1FilteredEntities, 1)
+	assert.Contains(t, c1FilteredEntities, entity1)
+
+	// Test QueryWith2_C2 (filter on second component)
+	inBoundsFilter := ecs.Where(func(t *TransformComponent) bool {
+		return t.Position.X < 10 && t.Position.Y < 10
+	})
+	var c2FilteredEntities []ecs.EntityID
+	for entityID := range ecs.QueryWith2_C2[CameraComponent, TransformComponent](em, inBoundsFilter) {
+		c2FilteredEntities = append(c2FilteredEntities, entityID)
+	}
+	assert.Len(t, c2FilteredEntities, 1)
+	assert.Contains(t, c2FilteredEntities, entity1)
+
+	// Test QueryWith3_C3 (filter on third component)
+	fastFilter := ecs.Where(func(v *VelocityComponent) bool { return v.Speed > 15.0 })
+	var c3FilteredEntities []ecs.EntityID
+	for entityID := range ecs.QueryWith3_C3[CameraComponent, TransformComponent, VelocityComponent](em, fastFilter) {
+		c3FilteredEntities = append(c3FilteredEntities, entityID)
+	}
+	assert.Len(t, c3FilteredEntities, 1)
+	assert.Contains(t, c3FilteredEntities, entity1)
 }
