@@ -14,7 +14,7 @@ type System interface {
 	Priority() int
 	Update() error
 	Teardown()
-	baseSystem()
+	baseSystem() *BaseSystem
 }
 
 type RendererSystem interface {
@@ -54,17 +54,21 @@ func (s *BaseSystem) Game() *Game {
 	return s.game
 }
 
-func (s *BaseSystem) baseSystem() {}
+func (s *BaseSystem) baseSystem() *BaseSystem {
+	return s
+}
 
 type SystemManager struct {
 	systems       []System
 	entityManager *EntityManager
+	game          *Game
 }
 
-func NewSystemManager(entityManager *EntityManager) *SystemManager {
+func NewSystemManager(entityManager *EntityManager, game *Game) *SystemManager {
 	return &SystemManager{
 		systems:       make([]System, 0),
 		entityManager: entityManager,
+		game:          game,
 	}
 }
 
@@ -85,6 +89,11 @@ func (sm *SystemManager) sortSystems() {
 func (sm *SystemManager) Add(systems ...System) {
 	if len(systems) == 0 {
 		return
+	}
+
+	for _, system := range systems {
+		system.baseSystem().entityManager = sm.entityManager
+		system.baseSystem().game = sm.game
 	}
 
 	sm.systems = append(sm.systems, systems...)
