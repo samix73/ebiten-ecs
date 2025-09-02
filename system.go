@@ -17,7 +17,7 @@ type System interface {
 	baseSystem() *BaseSystem
 }
 
-type RendererSystem interface {
+type DrawableSystem interface {
 	System
 	Draw(screen *ebiten.Image)
 }
@@ -29,12 +29,10 @@ type BaseSystem struct {
 	game          *Game
 }
 
-func NewBaseSystem(id SystemID, priority int, entityManager *EntityManager, game *Game) *BaseSystem {
+func NewBaseSystem(id SystemID, priority int) *BaseSystem {
 	return &BaseSystem{
-		id:            id,
-		priority:      priority,
-		entityManager: entityManager,
-		game:          game,
+		id:       id,
+		priority: priority,
 	}
 }
 
@@ -56,6 +54,10 @@ func (s *BaseSystem) Game() *Game {
 
 func (s *BaseSystem) baseSystem() *BaseSystem {
 	return s
+}
+
+func (s *BaseSystem) canUpdate() bool {
+	return s.entityManager != nil && s.game != nil
 }
 
 type SystemManager struct {
@@ -92,8 +94,13 @@ func (sm *SystemManager) Add(systems ...System) {
 	}
 
 	for _, system := range systems {
-		system.baseSystem().entityManager = sm.entityManager
-		system.baseSystem().game = sm.game
+		if system.baseSystem().entityManager == nil {
+			system.baseSystem().entityManager = sm.entityManager
+		}
+
+		if system.baseSystem().game == nil {
+			system.baseSystem().game = sm.game
+		}
 	}
 
 	sm.systems = append(sm.systems, systems...)
@@ -127,6 +134,10 @@ func (sm *SystemManager) Remove(systemID SystemID) {
 
 func (sm *SystemManager) Update() error {
 	for _, system := range sm.systems {
+		if !system.baseSystem().canUpdate() {
+			continue
+		}
+
 		if err := system.Update(); err != nil {
 			return fmt.Errorf("error updating system %d: %w", system.ID(), err)
 		}
@@ -137,7 +148,7 @@ func (sm *SystemManager) Update() error {
 
 func (sm *SystemManager) Draw(screen *ebiten.Image) {
 	for _, system := range sm.systems {
-		if system, ok := system.(RendererSystem); ok {
+		if system, ok := system.(DrawableSystem); ok {
 			system.Draw(screen)
 		}
 	}
