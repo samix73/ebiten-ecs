@@ -23,6 +23,8 @@ type BaseWorld struct {
 	entityManager *EntityManager
 }
 
+// baseWorld returns the BaseWorld instance.
+// This is used to enforce embedding of BaseWorld in concrete world implementations.
 func (bw *BaseWorld) baseWorld() *BaseWorld {
 	return bw
 }

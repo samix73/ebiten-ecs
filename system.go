@@ -69,6 +69,8 @@ func (s *BaseSystem) Game() *Game {
 	return s.game
 }
 
+// baseSystem returns the BaseSystem instance.
+// This is used to enforce embedding of BaseSystem in concrete system implementations.
 func (s *BaseSystem) baseSystem() *BaseSystem {
 	return s
 }
