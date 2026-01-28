@@ -1,3 +1,5 @@
+[![Go CI](https://github.com/samix73/ebiten-ecs/actions/workflows/ci.yml/badge.svg)](https://github.com/samix73/ebiten-ecs/actions/workflows/ci.yml)
+
 # ebiten-ecs
 
 A lightweight, generic, allocation–friendly Entity Component System (ECS) built for games using [Ebiten](https://ebitengine.org). It provides:
