@@ -5,11 +5,9 @@ A lightweight, generic, allocation–friendly Entity Component System (ECS) buil
 - Entity + component storage with pooling ([`ecs.ComponentContainer`](component.go))
 - Generic helpers for adding and querying components ([`ecs.AddComponent`](entity.go), [`ecs.Query`](entity.go), [`ecs.Query2`](entity.go), [`ecs.GetComponent`](entity.go))
 - Cache‑friendly multi-component querying
-- **Flexible filtering system with `QueryWith` functions ([`filter.go`](filter.go), [`spatial.go`](spatial.go))**
-- Systems with priorities and optional rendering phase ([`ecs.System`](system.go), [`ecs.RendererSystem`](system.go))
+- Flexible filtering system with `QueryWith` functions ([`filter.go`](filter.go), [`spatial.go`](spatial.go))
 - Worlds to scope game states/scenes ([`ecs.World`](world.go), [`ecs.BaseWorld`](world.go))
 - A thin wrapper over Ebiten’s game loop ([`ecs.Game`](game.go), [`ecs.GameConfig`](game.go))
-- Simple ID generation ([`ecs.NextID`](id.go))
 
 ## Installation
 
@@ -17,111 +15,175 @@ A lightweight, generic, allocation–friendly Entity Component System (ECS) buil
 go get github.com/samix73/ebiten-ecs
 ```
 
-## Quick Start
+## Integration
 
-Below is a minimal runnable example showing:
-- Defining components
-- Creating a system (with update + draw)
-- Creating a world embedding [`ecs.BaseWorld`](world.go)
-- Bootstrapping a game with [`ecs.Game`](game.go)
+### 1. Registering Systems
+
+Systems must be registered in the `init()` function of their package using `ecs.RegisterSystem`.
+
+```go
+package systems
+
+import (
+	"log/slog"
+
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
+	"github.com/samix73/ebiten-ecs"
+)
+
+// Ensure PauseSystem implements ecs.System
+var _ ecs.System = (*PauseSystem)(nil)
+
+func init() {
+	if err := ecs.RegisterSystem(NewPauseSystem); err != nil {
+		panic(err)
+	}
+}
+
+type PauseSystem struct {
+	*ecs.BaseSystem
+
+	paused            bool
+	originalTimeScale float64
+}
+
+func NewPauseSystem(priority int) *PauseSystem {
+	return &PauseSystem{
+		BaseSystem: ecs.NewBaseSystem(priority),
+
+		paused: false,
+	}
+}
+
+// Update checks for input and toggles the game's time scale.
+func (p *PauseSystem) Update() error {
+	// Example input check
+	if !inpututil.IsKeyJustPressed(ebiten.KeyP) {
+		return nil
+	}
+
+	game := p.Game()
+
+	if p.paused {
+		game.SetTimeScale(p.originalTimeScale)
+	} else {
+		p.originalTimeScale = game.TimeScale()
+		game.SetTimeScale(0)
+	}
+
+	p.paused = !p.paused
+
+	slog.Info("Paused", "paused", p.paused)
+
+	return nil
+}
+
+func (p *PauseSystem) Teardown() {
+}
+```
+
+### 2. Registering Components
+
+Components are registered similarly using `ecs.RegisterComponent`.
+
+```go
+package components
+
+import (
+	"github.com/jakecoffman/cp"
+	"github.com/samix73/ebiten-ecs/ecs"
+)
+
+func init() {
+	if err := ecs.RegisterComponent[Transform](); err != nil {
+		panic(err)
+	}
+}
+
+// Transform represents the position and rotation of an entity in 2D space.
+type Transform struct {
+	Position cp.Vector
+	Rotation float64
+}
+
+func (t *Transform) SetPosition(x, y float64) {
+	t.Position.X = x
+	t.Position.Y = y
+}
+
+func (t *Transform) Translate(x, y float64) {
+	t.Position.X += x
+	t.Position.Y += y
+}
+
+func (t *Transform) Reset() {
+	t.Position.X = 0
+	t.Position.Y = 0
+	t.Rotation = 0
+}
+```
+
+### 3. World Configuration
+
+Define your world and its initial state in a TOML file (e.g., `main_world.toml`).
+
+```toml
+name = "main_world"
+
+[[systems]]
+name = "RestartSystem"
+priority = 0
+
+[[systems]]
+name = "PauseSystem"
+priority = 100
+
+[[entities]]
+path = "entities/ActiveCamera.toml"
+```
+
+### 4. Loading and Running a World
+
+Use `ecs.Game` to load the world configuration and start the game loop.
 
 ```go
 package main
 
 import (
-    "log"
+	"log/slog"
+	"os"
 
-    "github.com/hajimehoshi/ebiten/v2"
-    "github.com/samix73/ebiten-ecs/ecs"
+	"github.com/samix73/ebiten-ecs/ecs"
 )
 
-// --- Components ---
-
-type Transform struct {
-    X, Y float64
-}
-
-// Initialize the Transform component
-func (t *Transform) Init()  {t.X, t.Y = 0, 0}
-// Reset the Transform component
-func (t *Transform) Reset() { t.X, t.Y = 0, 0 }
-
-// --- Systems ---
-
-type MovementSystem struct {
-    *ecs.BaseSystem
-}
-
-func NewMovementSystem(priority int, em *ecs.EntityManager, g *ecs.Game) *MovementSystem {
-    return &MovementSystem{
-        BaseSystem: ecs.NewBaseSystem(ecs.NextID(), priority, em, g),
-    }
-}
-
-func (s *MovementSystem) Update() error {
-    // Move every Transform slightly
-    for entityID := range ecs.Query[Transform](s.EntityManager()) {
-        if tr, ok := ecs.GetComponent[Transform](s.EntityManager(), entityID); ok {
-            tr.X += 60 * s.Game().DeltaTime()
-        }
-    }
-
-    return nil
-}
-
-// Optional render phase (implements ecs.RendererSystem)
-func (s *MovementSystem) Draw(screen *ebiten.Image) {
-    // Could draw debug info here (omitted for brevity)
-}
-
-func (s *MovementSystem) Teardown() {}
-
-// --- World ---
-
-type DemoWorld struct {
-    *ecs.BaseWorld
-}
-
-func (w *DemoWorld) Init(g *ecs.Game) error {
-    em := ecs.NewEntityManager()
-    sm := ecs.NewSystemManager(em)
-
-    w.BaseWorld = ecs.NewBaseWorld(em, sm, g)
-
-    // Systems
-    sm.Add(NewMovementSystem(0, em, g))
-
-    // Entities
-    player := em.NewEntity()
-    ecs.AddComponent[Transform](em, player)
-
-    return nil
-}
-
-// --- main ---
-
 func main() {
-    game := ecs.NewGame(&ecs.GameConfig{
-        Title:        "ECS Demo",
-        ScreenWidth:  800,
-        ScreenHeight: 600,
-        Fullscreen:   false,
-    })
+	g := ecs.NewGame(&ecs.GameConfig{
+		Title:        "Game",
+		ScreenWidth:  1280,
+		ScreenHeight: 960,
+		Fullscreen:   false,
+	})
 
-    if err := game.SetActiveWorld(&DemoWorld{}); err != nil {
-        log.Fatal(err)
-    }
+	// Load the world from the configuration file
+	world, err := g.LoadWorld("main_world.toml")
+	if err != nil {
+		slog.Error(err.Error())
+		os.Exit(1)
+	}
 
-    if err := game.Start(); err != nil {
-        log.Fatal(err)
-    }
+	g.SetActiveWorld(world)
+
+	if err := g.Start(); err != nil {
+		slog.Error(err.Error())
+		os.Exit(1)
+	}
 }
 ```
 
 ## Core Concepts
 
 - Entities: Opaque IDs (`EntityID` = [`ecs.ID`](id.go)) created via [`ecs.EntityManager.NewEntity`](entity.go).
-- Components: Plain structs with optional `Init()` + `Reset()` (for pooling). Added via [`ecs.AddComponent`](entity.go).
+- Components: Plain data types with optional `Init()` + `Reset()` (for pooling). Added via [`ecs.AddComponent`](entity.go).
 - Queries: Use generics for compile-time type safety ([`ecs.Query`](entity.go), [`ecs.Query2`](entity.go), [`ecs.Query3`](entity.go)).
 - Systems: Provide behavior; ordered by `Priority()` (lower first). Rendering systems also implement `Draw`.
 - Worlds: Aggregate an entity + system set; switchable via [`ecs.Game.SetActiveWorld`](game.go).
@@ -129,79 +191,71 @@ func main() {
 ## Query Examples
 
 ```go
-for e := range ecs.Query[Transform](em) { /* ... */ }
-for e := range ecs.Query2[Transform, AnotherComponent](em) { /* ... */ }
+for _, e := range ecs.Query[Transform](em) { /* ... */ }
+for _, e := range ecs.Query2[Transform, AnotherComponent](em) { /* ... */ }
 tr, ok := ecs.GetComponent[Transform](em, e)
 ```
 
 ## Filtering
 
-The ECS supports flexible filtering of query results using the filtering system. You can now filter on **any or all component types** in multi-component queries:
+The ECS supports flexible filtering of query results using `QueryWith` functions. You can filter on specific component types within a query:
 
 ```go
-// Basic filtering with Where()
+// Define a filter function
 highZoomFilter := func(c *CameraComponent) bool {
     return c.Zoom > 1.0
 }
 
-for entityID := range ecs.Where(em, ecs.Query[CameraComponent](em), highZoomFilter) {
+// 1. Single Component Query with Filter
+// Query entities with CameraComponent where Zoom > 1.0
+for _, entityID := range ecs.QueryWith(em, highZoomFilter) {
     camera := ecs.MustGetComponent[CameraComponent](em, entityID)
     // Process high-zoom cameras
 }
 
-// Multi-component filtering on ANY component type
-// Filter on first component type (Camera)
-for entityID := range ecs.Where(em, ecs.Query2[CameraComponent, Transform](em), highZoomFilter) {
+// 2. Multi-Component Query with Filter
+// Query entities with CameraComponent and Transform, filtering ONLY on CameraComponent
+// Pass 'nil' for the second filter to skip filtering on Transform
+for _, entityID := range ecs.QueryWith2(em, highZoomFilter, nil) {
     camera := ecs.MustGetComponent[CameraComponent](em, entityID)
-    // Process high-zoom cameras
+    transform := ecs.MustGetComponent[Transform](em, entityID)
+    // Process...
 }
 
-
-// Filter on second component type (Transform)  
+// 3. Multi-Component Query with Multiple Filters
 boundsFilter := func(t *Transform) bool {
     return t.X >= 0 && t.X <= 100 && t.Y >= 0 && t.Y <= 100
 }
-for entityID := range ecs.Where(em, ecs.Query2[CameraComponent, Transform](em), boundsFilter) {
-    // Process entities where Transform is within bounds
-}
 
-// Filter on BOTH component types simultaneously
-highZoomFiltered := ecs.Where(em, ecs.Query2[CameraComponent, Transform](em), highZoomFilter)
-transformFiltered := ecs.Where(em, highZoomFiltered, boundsFilter)
-
-for entityID := range transformFiltered {
+// Filter on BOTH components (Logical AND between component filters is implicit in QueryWith2)
+for _, entityID := range ecs.QueryWith2(em, highZoomFilter, boundsFilter) {
     // Process entities where Camera.Zoom > 1.0 AND Transform is within bounds
 }
 
-// Combining filters with logical 1operators
-lowZoomFilter := ecs.Where(func(c *CameraComponent) bool { return c.Zoom < 0.5 })
-extremeZoom := ecs.Or(highZoomFilter, lowZoomFilter)
+// 4. Advanced Filter Composition
+// Use ecs.And, ecs.Or, ecs.Not to create complex filters for a single component
 
-for entityID := range ecs.Where(em, ecs.Query2[CameraComponent, Transform](em), extremeZoom) {
-    // Process cameras with extreme zoom levels (very high or very low)
-}
-
-// Complex filter combinations
-complexFilter := ecs.And(
-    func(c *CameraComponent) bool { return c.Zoom > 1.0 },
+// Create a compound filter for CameraComponent
+complexCameraFilter := ecs.And(
+    highZoomFilter,
     ecs.Not(func(c *CameraComponent) bool { return c.FOV > 90 }),
 )
+
+for _, entityID := range ecs.QueryWith(em, complexCameraFilter) {
+    // Process cameras with Zoom > 1.0 AND FOV <= 90
+}
 ```
 
 ### Filter Functions
-
-**Core Filter Operations:**
-- **`Where(entities, filter)`**: Creates filters entities based on a component filter
-- **`And(filters...)`**: Combines filters with logical AND  
-- **`Or(filters...)`**: Combines filters with logical OR
-- **`Not(filter)`**: Negates a filter
+- **`QueryWith(em, filter)`**: Query entities with 1 component type and apply filter.
+- **`QueryWith2(em, filter1, filter2)`**: Query entities with 2 component types. Pass `nil` for any filter to skip it.
+- **`QueryWith3(em, filter1, filter2, filter3)`**: Query entities with 3 component types.
+- **`And(filters...)`**: Combines filters for the *same component type* with logical AND.
+- **`Or(filters...)`**: Combines filters for the *same component type* with logical OR.
+- **`Not(filter)`**: Negates a filter.
 
 ### Performance
-
-Filtering maintains the same performance characteristics as regular queries by:
-- Using the existing query optimization (smallest component container first)
-- Applying filters only after component type matching
-- Supporting efficient early termination with iterator patterns
+Filtering applies the filter function during the query iteration. It is efficient but obviously slower than a raw `Query` if the filter logic is heavy. `QueryWith` functions iterate over the archetypes that match the component composition first, then apply the filter functions to the candidates.
 
 ## Performance
 
