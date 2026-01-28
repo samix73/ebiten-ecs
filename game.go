@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"maps"
 	"math"
+	"os"
 	"slices"
 
 	"github.com/BurntSushi/toml"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
-	"github.com/samix73/game/game/assets"
 )
 
 var _ ebiten.Game = (*Game)(nil)
@@ -74,8 +74,8 @@ func (g *Game) loadSystems(systemManager *SystemManager, systemCfgs []SystemConf
 // Components from world metadata overwrite components from entity files.
 func (g *Game) loadEntities(em *EntityManager, entityCfgs []EntityConfig, worldMD toml.MetaData) error {
 	for _, entityCfg := range entityCfgs {
-		if entityCfg.Name == "" {
-			return errors.New("ecs.Game.loadEntities: entity name is empty")
+		if entityCfg.Path == "" {
+			return errors.New("ecs.Game.loadEntities: entity path is empty")
 		}
 
 		componentsByName := make(map[string]any)
@@ -97,7 +97,7 @@ func (g *Game) loadEntities(em *EntityManager, entityCfgs []EntityConfig, worldM
 			componentsByName[name] = component
 		}
 
-		entityData, err := assets.GetEntity(entityCfg.Name)
+		entityData, err := os.ReadFile(entityCfg.Path)
 		if err != nil {
 			return fmt.Errorf("ecs.Game.loadEntities: %w", err)
 		}
@@ -136,13 +136,13 @@ func (g *Game) loadEntities(em *EntityManager, entityCfgs []EntityConfig, worldM
 }
 
 func (g *Game) LoadWorld(path string) (*World, error) {
-	data, err := assets.GetWorld(path)
+	f, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("ecs.Game.LoadWorld: %w", err)
 	}
 
 	var worldConfig WorldConfig
-	md, err := toml.NewDecoder(bytes.NewReader(data)).Decode(&worldConfig)
+	md, err := toml.NewDecoder(bytes.NewReader(f)).Decode(&worldConfig)
 	if err != nil {
 		return nil, fmt.Errorf("ecs.Game.LoadWorld: %w", err)
 	}

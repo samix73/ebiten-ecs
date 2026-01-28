@@ -3,7 +3,7 @@ package ecs_test
 import (
 	"testing"
 
-	"github.com/samix73/game/ecs"
+	ecs "github.com/samix73/ebiten-ecs"
 	"github.com/stretchr/testify/assert"
 )
 

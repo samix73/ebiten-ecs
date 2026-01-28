@@ -5,9 +5,12 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/samix73/game/helpers"
 	"github.com/stretchr/testify/require"
 )
+
+func ptr[T any](v T) *T {
+	return &v
+}
 
 func TestNewArchetype(t *testing.T) {
 	tests := []struct {
@@ -107,7 +110,7 @@ func TestArchetype_AddEntity(t *testing.T) {
 			entitiesToAdd: []entityToAdd{
 				{
 					entityID:   1,
-					components: map[ComponentID]any{intComponentID: helpers.New(1)},
+					components: map[ComponentID]any{intComponentID: ptr(1)},
 					wantErr:    false,
 				},
 			},
@@ -119,8 +122,8 @@ func TestArchetype_AddEntity(t *testing.T) {
 				{
 					entityID: 1,
 					components: map[ComponentID]any{
-						intComponentID:     helpers.New(1),
-						float64ComponentID: helpers.New(2.0),
+						intComponentID:     ptr(1),
+						float64ComponentID: ptr(2.0),
 					},
 					wantErr: false,
 				},
@@ -146,7 +149,7 @@ func TestArchetype_AddEntity(t *testing.T) {
 				{
 					entityID: 1,
 					components: map[ComponentID]any{
-						2323: helpers.New("test"),
+						2323: ptr("test"),
 					},
 					wantErr: true,
 				},
@@ -158,12 +161,12 @@ func TestArchetype_AddEntity(t *testing.T) {
 			entitiesToAdd: []entityToAdd{
 				{
 					entityID:   1,
-					components: map[ComponentID]any{intComponentID: helpers.New(1)},
+					components: map[ComponentID]any{intComponentID: ptr(1)},
 					wantErr:    false,
 				},
 				{
 					entityID:   1,
-					components: map[ComponentID]any{intComponentID: helpers.New(2)},
+					components: map[ComponentID]any{intComponentID: ptr(2)},
 					wantErr:    true,
 				},
 			},
@@ -267,7 +270,7 @@ func TestArchetype_RemoveEntity(t *testing.T) {
 				{
 					entityID: 0,
 					componentsData: map[ComponentID]any{
-						intComponentID: helpers.New(1),
+						intComponentID: ptr(1),
 					},
 				},
 			},
@@ -275,7 +278,7 @@ func TestArchetype_RemoveEntity(t *testing.T) {
 				{
 					entityID: 0,
 					want: map[ComponentID]any{
-						intComponentID: helpers.New(1),
+						intComponentID: ptr(1),
 					},
 					wantErr: false,
 				},
@@ -288,8 +291,8 @@ func TestArchetype_RemoveEntity(t *testing.T) {
 				{
 					entityID: 0,
 					componentsData: map[ComponentID]any{
-						intComponentID:     helpers.New(1),
-						float64ComponentID: helpers.New(2.0),
+						intComponentID:     ptr(1),
+						float64ComponentID: ptr(2.0),
 					},
 				},
 			},
@@ -297,8 +300,8 @@ func TestArchetype_RemoveEntity(t *testing.T) {
 				{
 					entityID: 0,
 					want: map[ComponentID]any{
-						intComponentID:     helpers.New(1),
-						float64ComponentID: helpers.New(2.0),
+						intComponentID:     ptr(1),
+						float64ComponentID: ptr(2.0),
 					},
 					wantErr: false,
 				},
@@ -311,7 +314,7 @@ func TestArchetype_RemoveEntity(t *testing.T) {
 				{
 					entityID: 0,
 					componentsData: map[ComponentID]any{
-						intComponentID: helpers.New(1),
+						intComponentID: ptr(1),
 					},
 				},
 			},
@@ -330,7 +333,7 @@ func TestArchetype_RemoveEntity(t *testing.T) {
 				{
 					entityID: 0,
 					componentsData: map[ComponentID]any{
-						intComponentID: helpers.New(1),
+						intComponentID: ptr(1),
 					},
 				},
 			},
@@ -338,14 +341,14 @@ func TestArchetype_RemoveEntity(t *testing.T) {
 				{
 					entityID: 0,
 					want: map[ComponentID]any{
-						intComponentID: helpers.New(1),
+						intComponentID: ptr(1),
 					},
 					wantErr: false,
 				},
 				{
 					entityID: 0,
 					want: map[ComponentID]any{
-						intComponentID: helpers.New(1),
+						intComponentID: ptr(1),
 					},
 					wantErr: true,
 				},

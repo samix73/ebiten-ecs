@@ -6,7 +6,6 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/hajimehoshi/ebiten/v2 v2.9.7
 	github.com/jakecoffman/cp v1.2.1
-	github.com/samix73/game v0.0.0-20260127224747-bd85b35c7c15
 	github.com/stretchr/testify v1.11.1
 )
 

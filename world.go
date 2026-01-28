@@ -13,7 +13,7 @@ type SystemConfig struct {
 type EntityComponentsConfig map[string]toml.Primitive
 
 type EntityConfig struct {
-	Name       string                 `toml:"name"`
+	Path       string                 `toml:"path"`
 	Components EntityComponentsConfig `toml:"components"`
 }
 
