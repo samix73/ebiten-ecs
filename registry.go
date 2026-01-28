@@ -1,7 +1,6 @@
 package ecs
 
 import (
-	"fmt"
 	"log/slog"
 	"reflect"
 	"sync"
@@ -32,10 +31,10 @@ func getName[S any]() string {
 
 // RegisterSystem registers a system constructor in the ECS registry
 // to allow for dynamic system creation.
-func RegisterSystem[S System](systemCtor SystemCtor[S]) error {
+func RegisterSystem[S System](systemCtor SystemCtor[S]) {
 	name := getName[S]()
 	if _, ok := systemsRegistry[name]; ok {
-		return fmt.Errorf("ecs.RegisterSystem: system %s already registered", name)
+		return
 	}
 
 	systemsRegistry[name] = func(priority int) System {
@@ -43,13 +42,12 @@ func RegisterSystem[S System](systemCtor SystemCtor[S]) error {
 	}
 
 	slog.Debug("ecs.RegisterSystem: registered system", slog.String("name", name))
-	return nil
 }
 
-func RegisterComponent[T any]() error {
+func RegisterComponent[T any]() {
 	name := getName[T]()
 	if _, ok := componentsNameLookup[name]; ok {
-		return fmt.Errorf("ecs.RegisterComponent: component %s already registered", name)
+		return
 	}
 
 	componentsNameLookup[name] = *new(T)
@@ -61,7 +59,7 @@ func RegisterComponent[T any]() error {
 	}
 
 	if _, exists := componentTypeLookup[componentType]; exists {
-		return fmt.Errorf("ecs.RegisterComponent: component %s already registered", name)
+		return
 	}
 
 	componentTypeLookup[componentType] = nextComponentBit
@@ -69,7 +67,6 @@ func RegisterComponent[T any]() error {
 	nextComponentBit++
 
 	slog.Debug("ecs.RegisterComponent: registered component", slog.String("name", name))
-	return nil
 }
 
 func NewComponent(em *EntityManager, name string) (any, bool) {

@@ -107,10 +107,8 @@ func NewCameraEntity(tb testing.TB, em *ecs.EntityManager) ecs.EntityID {
 }
 
 func TestEntityCreation(t *testing.T) {
-	err := ecs.RegisterComponent[TransformComponent]()
-	require.NoError(t, err)
-	err = ecs.RegisterComponent[CameraComponent]()
-	require.NoError(t, err)
+	ecs.RegisterComponent[TransformComponent]()
+	ecs.RegisterComponent[CameraComponent]()
 
 	em := ecs.NewEntityManager()
 
@@ -126,18 +124,12 @@ func TestEntityCreation(t *testing.T) {
 func TestQuery(t *testing.T) {
 	t.Parallel()
 
-	err := ecs.RegisterComponent[TransformComponent]()
-	require.NoError(t, err)
-	err = ecs.RegisterComponent[CameraComponent]()
-	require.NoError(t, err)
-	err = ecs.RegisterComponent[VelocityComponent]()
-	require.NoError(t, err)
-	err = ecs.RegisterComponent[MassComponent]()
-	require.NoError(t, err)
-	err = ecs.RegisterComponent[HealthComponent]()
-	require.NoError(t, err)
-	err = ecs.RegisterComponent[int]()
-	require.NoError(t, err)
+	ecs.RegisterComponent[TransformComponent]()
+	ecs.RegisterComponent[CameraComponent]()
+	ecs.RegisterComponent[VelocityComponent]()
+	ecs.RegisterComponent[MassComponent]()
+	ecs.RegisterComponent[HealthComponent]()
+	ecs.RegisterComponent[int]()
 
 	em := ecs.NewEntityManager()
 
@@ -189,10 +181,8 @@ func TestQuery(t *testing.T) {
 }
 
 func TestQuerySingleComponentFromMultiComponentEntity(t *testing.T) {
-	err := ecs.RegisterComponent[TransformComponent]()
-	require.NoError(t, err)
-	err = ecs.RegisterComponent[CameraComponent]()
-	require.NoError(t, err)
+	ecs.RegisterComponent[TransformComponent]()
+	ecs.RegisterComponent[CameraComponent]()
 
 	em := ecs.NewEntityManager()
 
@@ -236,16 +226,11 @@ func TestQuerySingleComponentFromMultiComponentEntity(t *testing.T) {
 //  3. If we're iterating by index and the iterator reads the slice length dynamically,
 //     the swapped entity at the current position may be skipped
 func TestAddComponentWhileIterating(t *testing.T) {
-	err := ecs.RegisterComponent[TransformComponent]()
-	require.NoError(t, err)
-	err = ecs.RegisterComponent[CameraComponent]()
-	require.NoError(t, err)
-	err = ecs.RegisterComponent[VelocityComponent]()
-	require.NoError(t, err)
-	err = ecs.RegisterComponent[MassComponent]()
-	require.NoError(t, err)
-	err = ecs.RegisterComponent[HealthComponent]()
-	require.NoError(t, err)
+	ecs.RegisterComponent[TransformComponent]()
+	ecs.RegisterComponent[CameraComponent]()
+	ecs.RegisterComponent[VelocityComponent]()
+	ecs.RegisterComponent[MassComponent]()
+	ecs.RegisterComponent[HealthComponent]()
 
 	em := ecs.NewEntityManager()
 
@@ -323,8 +308,7 @@ func TestAddComponentWhileIterating(t *testing.T) {
 }
 
 func TestModifyOtherEntityWhileIterating(t *testing.T) {
-	err := ecs.RegisterComponent[TransformComponent]()
-	require.NoError(t, err)
+	ecs.RegisterComponent[TransformComponent]()
 
 	em := ecs.NewEntityManager()
 
@@ -364,8 +348,7 @@ func TestModifyOtherEntityWhileIterating(t *testing.T) {
 }
 
 func TestModifyingComponentValue(t *testing.T) {
-	err := ecs.RegisterComponent[TransformComponent]()
-	require.NoError(t, err)
+	ecs.RegisterComponent[TransformComponent]()
 
 	em := ecs.NewEntityManager()
 
@@ -384,16 +367,14 @@ func TestModifyingComponentValue(t *testing.T) {
 
 	for _, e := range ecs.Query[TransformComponent](em) {
 		transform := ecs.MustGetComponent[TransformComponent](em, e)
-		assert.Equal(t, 24, transform.Position.X)
-		assert.Equal(t, 54, transform.Position.Y)
+		assert.Equal(t, float64(24), transform.Position.X)
+		assert.Equal(t, float64(54), transform.Position.Y)
 	}
 }
 
 func BenchmarkGetComponent(b *testing.B) {
-	err := ecs.RegisterComponent[TransformComponent]()
-	require.NoError(b, err)
-	err = ecs.RegisterComponent[CameraComponent]()
-	require.NoError(b, err)
+	ecs.RegisterComponent[TransformComponent]()
+	ecs.RegisterComponent[CameraComponent]()
 
 	em := ecs.NewEntityManager()
 
@@ -431,18 +412,12 @@ func BenchmarkGetComponent(b *testing.B) {
 }
 
 func BenchmarkQueryEntities(b *testing.B) {
-	err := ecs.RegisterComponent[TransformComponent]()
-	require.NoError(b, err)
-	err = ecs.RegisterComponent[CameraComponent]()
-	require.NoError(b, err)
-	err = ecs.RegisterComponent[HealthComponent]()
-	require.NoError(b, err)
-	err = ecs.RegisterComponent[VelocityComponent]()
-	require.NoError(b, err)
-	err = ecs.RegisterComponent[int]()
-	require.NoError(b, err)
-	err = ecs.RegisterComponent[string]()
-	require.NoError(b, err)
+	ecs.RegisterComponent[TransformComponent]()
+	ecs.RegisterComponent[CameraComponent]()
+	ecs.RegisterComponent[HealthComponent]()
+	ecs.RegisterComponent[VelocityComponent]()
+	ecs.RegisterComponent[int]()
+	ecs.RegisterComponent[string]()
 
 	em := ecs.NewEntityManager()
 

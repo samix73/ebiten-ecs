@@ -70,14 +70,11 @@ func TestNewArchetype(t *testing.T) {
 }
 
 func TestArchetype_AddEntity(t *testing.T) {
-	err := RegisterComponent[int]()
-	require.NoError(t, err)
-
+	RegisterComponent[int]()
 	intComponentID, ok := getComponentID(reflect.TypeFor[int]())
 	require.True(t, ok)
 
-	err = RegisterComponent[float64]()
-	require.NoError(t, err)
+	RegisterComponent[float64]()
 
 	float64ComponentID, ok := getComponentID(reflect.TypeFor[float64]())
 	require.True(t, ok)
@@ -217,14 +214,11 @@ func TestArchetype_AddEntity(t *testing.T) {
 }
 
 func TestArchetype_RemoveEntity(t *testing.T) {
-	err := RegisterComponent[int]()
-	require.NoError(t, err)
-
+	RegisterComponent[int]()
 	intComponentID, ok := getComponentID(reflect.TypeFor[int]())
 	require.True(t, ok)
 
-	err = RegisterComponent[float64]()
-	require.NoError(t, err)
+	RegisterComponent[float64]()
 
 	float64ComponentID, ok := getComponentID(reflect.TypeFor[float64]())
 	require.True(t, ok)

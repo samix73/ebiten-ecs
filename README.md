@@ -35,9 +35,7 @@ import (
 var _ ecs.System = (*PauseSystem)(nil)
 
 func init() {
-	if err := ecs.RegisterSystem(NewPauseSystem); err != nil {
-		panic(err)
-	}
+	ecs.RegisterSystem(NewPauseSystem)
 }
 
 type PauseSystem struct {
@@ -95,9 +93,7 @@ import (
 )
 
 func init() {
-	if err := ecs.RegisterComponent[Transform](); err != nil {
-		panic(err)
-	}
+	ecs.RegisterComponent[Transform]()
 }
 
 // Transform represents the position and rotation of an entity in 2D space.
