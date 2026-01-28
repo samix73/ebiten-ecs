@@ -2,243 +2,304 @@ package ecs
 
 import (
 	"fmt"
-	"iter"
+	"log/slog"
 	"reflect"
-	"slices"
+	"sync"
 )
 
-type EntityID = ID
+type EntityID = uint64
 
 type EntityManager struct {
-	entities                  map[EntityID]struct{}
-	componentContainers       map[reflect.Type]*ComponentContainer
-	entityComponentSignatures map[EntityID]map[reflect.Type]struct{}
+	nextID          EntityID
+	archetypes      []*Archetype
+	entityArchetype map[EntityID]*Archetype
+	componentPools  map[reflect.Type]*sync.Pool
 }
 
 func NewEntityManager() *EntityManager {
 	return &EntityManager{
-		entities:                  make(map[EntityID]struct{}),
-		componentContainers:       make(map[reflect.Type]*ComponentContainer),
-		entityComponentSignatures: make(map[EntityID]map[reflect.Type]struct{}),
+		nextID:          1,
+		archetypes:      make([]*Archetype, 0),
+		entityArchetype: make(map[EntityID]*Archetype),
+		componentPools:  make(map[reflect.Type]*sync.Pool),
 	}
 }
 
-func (em *EntityManager) NewEntity() EntityID {
-	id := NextID()
-	em.entities[id] = struct{}{}
-	em.entityComponentSignatures[id] = make(map[reflect.Type]struct{})
+func (em *EntityManager) NewEntity(components ...any) (EntityID, error) {
+	id := em.nextID
+	em.nextID++
 
-	return id
+	var signature Bitmask
+	var componentData = make(map[ComponentID]any, len(components))
+	for _, component := range components {
+		componentID, ok := getComponentID(reflect.TypeOf(component))
+		if !ok {
+			return 0, fmt.Errorf("ecs.EntityManager.NewEntity: component %T not registered, call RegisterComponent first", component)
+		}
+		signature.Set(componentID)
+		componentData[componentID] = component
+	}
+
+	archetype := em.getOrCreateArchetype(signature)
+	if err := archetype.AddEntity(id, componentData); err != nil {
+		return 0, fmt.Errorf("ecs.EntityManager.NewEntity: failed to add entity %w", err)
+	}
+	em.entityArchetype[id] = archetype
+
+	return id, nil
 }
 
-func (em *EntityManager) HasComponent(entityID EntityID, componentType any) bool {
-	if _, exists := em.entities[entityID]; !exists {
-		return false
-	}
-
-	if _, exists := em.entityComponentSignatures[entityID][reflect.TypeOf(componentType)]; !exists {
-		return false
-	}
-
-	return true
-}
-
-func (em *EntityManager) Remove(entityID EntityID) {
-	if _, exists := em.entities[entityID]; !exists {
-		return
-	}
-
-	for componentType := range em.entityComponentSignatures[entityID] {
-		if container, exists := em.componentContainers[componentType]; exists {
-			container.Remove(entityID)
+func (em *EntityManager) getOrCreateArchetype(signature Bitmask) *Archetype {
+	for _, archetype := range em.archetypes {
+		if archetype.SignatureMatches(signature) {
+			return archetype
 		}
 	}
 
-	delete(em.entityComponentSignatures, entityID)
-	delete(em.entities, entityID)
+	archetype := NewArchetype(signature)
+	em.archetypes = append(em.archetypes, archetype)
+
+	return archetype
 }
 
-func (em *EntityManager) RemoveComponent(entityID EntityID, componentType any) {
-	if _, exists := em.entities[entityID]; !exists {
-		return
-	}
-
-	refType := reflect.TypeOf(componentType)
-
-	if _, exists := em.entityComponentSignatures[entityID][refType]; !exists {
-		return
-	}
-
-	container, exists := em.componentContainers[refType]
+func (em *EntityManager) HasComponent(entityID EntityID, componentID ComponentID) bool {
+	archetype, exists := em.entityArchetype[entityID]
 	if !exists {
-		return
+		return false
 	}
 
-	container.Remove(entityID)
-	delete(em.entityComponentSignatures[entityID], refType)
+	return archetype.HasComponent(entityID, componentID)
 }
 
-// Query returns a sequence of EntityIDs that match the specified component types.
-func (em *EntityManager) Query(componentTypes ...any) iter.Seq[EntityID] {
-	zeroIter := func(yield func(EntityID) bool) {}
-
-	if len(componentTypes) == 0 {
-		return zeroIter
+func (em *EntityManager) Remove(entityID EntityID) error {
+	archetype, exists := em.entityArchetype[entityID]
+	if !exists {
+		return fmt.Errorf("ecs.EntityManager.Remove: entity %d does not exist", entityID)
 	}
 
-	// If only one component type is specified, return entities with that component
-	if len(componentTypes) == 1 {
-		componentContainer, exists := em.componentContainers[reflect.TypeOf(componentTypes[0])]
-		if !exists {
-			return zeroIter
+	componentData, err := archetype.RemoveEntity(entityID)
+	if err != nil {
+		return fmt.Errorf("ecs.EntityManager.Remove: %w", err)
+	}
+
+	// Return components to pools
+	for componentID, component := range componentData {
+		pool, ok := getComponentPool(componentID)
+		if !ok {
+			return fmt.Errorf("ecs.EntityManager.Remove: component %d not registered", componentID)
 		}
-
-		return componentContainer.Entities()
+		pool.Put(component)
 	}
 
-	// Pre-check: if any component type doesn't exist, return empty iterator
-	containers := make([]*ComponentContainer, len(componentTypes))
-	for i, componentType := range componentTypes {
-		container, exists := em.componentContainers[reflect.TypeOf(componentType)]
-		if !exists {
-			return zeroIter
+	delete(em.entityArchetype, entityID)
+
+	return nil
+}
+
+func (em *EntityManager) RemoveComponent(entityID EntityID, componentID ComponentID) error {
+	archetype, exists := em.entityArchetype[entityID]
+	if !exists {
+		return fmt.Errorf("ecs.EntityManager.RemoveComponent: entity %d does not exist", entityID)
+	}
+
+	if !archetype.HasComponent(entityID, componentID) {
+		return fmt.Errorf("ecs.EntityManager.RemoveComponent: entity %d does not have component %d", entityID, componentID)
+	}
+
+	componentData, err := archetype.RemoveEntity(entityID)
+	if err != nil {
+		return fmt.Errorf("ecs.EntityManager.RemoveComponent: %w", err)
+	}
+
+	// Get the component to return to pool
+	removedComponent := componentData[componentID]
+
+	// Remove the specified component type
+	delete(componentData, componentID)
+
+	// Return removed component to pool
+	if resettable, ok := removedComponent.(Component); ok {
+		resettable.Reset()
+	}
+
+	pool, ok := getComponentPool(componentID)
+	if !ok {
+		return fmt.Errorf("ecs.EntityManager.RemoveComponent: component %d not registered", componentID)
+	}
+	pool.Put(removedComponent)
+
+	// Calculate new signature
+	var newSignature Bitmask
+	for componentID := range componentData {
+		newSignature.Set(componentID)
+	}
+
+	// Move entity to new archetype
+	newArchetype := em.getOrCreateArchetype(newSignature)
+	if err := newArchetype.AddEntity(entityID, componentData); err != nil {
+		return fmt.Errorf("ecs.EntityManager.RemoveComponent: %w", err)
+	}
+	em.entityArchetype[entityID] = newArchetype
+
+	return nil
+}
+
+func (em *EntityManager) Query(queryMask Bitmask) []EntityID {
+	entities := make([]EntityID, 0)
+
+	for i := range em.archetypes {
+		if em.archetypes[i].MatchesQuery(queryMask) {
+			entities = append(entities, em.archetypes[i].Entities()...)
 		}
-		containers[i] = container
 	}
 
-	// Find the container with the smallest number of entities to start with
-	// This reduces the number of entities we need to check
-	smallestIdx := 0
-	smallestCount := containers[0].Count()
+	return entities
+}
 
-	// Check if the smallest container is empty
-	if smallestCount == 0 {
-		return zeroIter
+func (em *EntityManager) AddComponent(entityID EntityID, componentID ComponentID) (any, error) {
+	archetype, exists := em.entityArchetype[entityID]
+	if !exists {
+		return nil, fmt.Errorf("entity %d does not exist", entityID)
 	}
 
-	for i := 1; i < len(containers); i++ {
-		count := containers[i].Count()
-		if count == 0 {
-			// If any container has zero entities, we can return immediately
-			return zeroIter
-		} else if count < smallestCount {
-			smallestCount = count
-			smallestIdx = i
-		}
+	if archetype.HasComponent(entityID, componentID) {
+		return nil, fmt.Errorf("ecs.EntityManager.AddComponent: entity %d already has component %d", entityID, componentID)
 	}
 
-	// Start with the smallest set and filter iteratively
-	smallestContainer := containers[smallestIdx]
-	otherContainers := make([]*ComponentContainer, 0, len(containers)-1)
-	for i, container := range containers {
-		if i != smallestIdx {
-			otherContainers = append(otherContainers, container)
-		}
+	// Get current component data
+	componentData, err := archetype.RemoveEntity(entityID)
+	if err != nil {
+		return nil, fmt.Errorf("ecs.EntityManager.AddComponent: failed to remove entity %d: %w", entityID, err)
 	}
 
-	return func(yield func(EntityID) bool) {
-		for entityID := range smallestContainer.Entities() {
-			// Check if this entity exists in all other containers
-			hasAllComponents := true
-			for _, container := range otherContainers {
-				if _, exists := container.Get(entityID); !exists {
-					hasAllComponents = false
-					break
-				}
-			}
-
-			if hasAllComponents {
-				if !yield(entityID) {
-					break
-				}
-			}
-		}
+	pool, ok := getComponentPool(componentID)
+	if !ok {
+		return nil, fmt.Errorf("ecs.EntityManager.AddComponent: component %d not registered", componentID)
 	}
+
+	component := pool.Get()
+
+	if resettable, ok := any(component).(Component); ok {
+		resettable.Init()
+	}
+
+	// Add new component
+	componentData[componentID] = component
+
+	// Calculate new signature
+	var newSignature Bitmask
+	for componentID := range componentData {
+		newSignature.Set(componentID)
+	}
+
+	// Move entity to new archetype
+	newArchetype := em.getOrCreateArchetype(newSignature)
+	if err := newArchetype.AddEntity(entityID, componentData); err != nil {
+		return nil, fmt.Errorf("ecs.EntityManager.AddComponent: %w", err)
+	}
+	em.entityArchetype[entityID] = newArchetype
+
+	return component, nil
+}
+
+func AddComponent[C any](em *EntityManager, entityID EntityID) (*C, error) {
+	componentType := reflect.TypeFor[C]()
+	componentID, ok := getComponentID(componentType)
+	if !ok {
+		return nil, fmt.Errorf("ecs.AddComponent: component %s not registered", componentType.Name())
+	}
+
+	component, err := em.AddComponent(entityID, componentID)
+	if err != nil {
+		slog.Error("ecs.AddComponent: failed to add component",
+			slog.String("type", componentType.Name()),
+			slog.Uint64("entityID", entityID),
+			slog.Any("error", err),
+		)
+
+		return nil, fmt.Errorf("ecs.AddComponent: failed to add component: %w", err)
+	}
+
+	return component.(*C), nil
 }
 
 func (em *EntityManager) Teardown() {
-	for _, container := range em.componentContainers {
-		container.Teardown()
+	em.archetypes = nil
+	em.entityArchetype = nil
+	em.componentPools = nil
+}
+
+func RemoveComponent[C any](em *EntityManager, entityID EntityID) error {
+	componentType := reflect.TypeFor[C]()
+	componentID, ok := getComponentID(componentType)
+	if !ok {
+		return fmt.Errorf("ecs.RemoveComponent: component %s not registered", componentType.Name())
 	}
 
-	em.entities = nil
-	em.entityComponentSignatures = nil
-	em.componentContainers = nil
-}
-
-func AddComponent[C any](em *EntityManager, entityID EntityID) *C {
-	if _, exists := em.entities[entityID]; !exists {
-		return nil
+	if err := em.RemoveComponent(entityID, componentID); err != nil {
+		return fmt.Errorf("ecs.RemoveComponent: %w", err)
 	}
 
-	var zero C
-	// Check if the component type is already registered for this entity
-	componentType := reflect.TypeOf(zero)
-	if _, exists := em.entityComponentSignatures[entityID][componentType]; exists {
-		return MustGetComponent[C](em, entityID)
+	return nil
+}
+
+func Query[C any](em *EntityManager) []EntityID {
+	queryMask, ok := getComponentsBitmask([]reflect.Type{reflect.TypeFor[C]()})
+	if !ok {
+		return []EntityID{}
 	}
 
-	container, exists := em.componentContainers[componentType]
-	if !exists {
-		container = NewComponentContainer(func() any {
-			var c C
-			return &c
-		})
-		em.componentContainers[componentType] = container
+	return em.Query(queryMask)
+}
+
+func Query2[C1, C2 any](em *EntityManager) []EntityID {
+	queryMask, ok := getComponentsBitmask([]reflect.Type{
+		reflect.TypeFor[C1](),
+		reflect.TypeFor[C2](),
+	})
+	if !ok {
+		return []EntityID{}
 	}
 
-	component := container.Add(entityID)
-	em.entityComponentSignatures[entityID][componentType] = struct{}{}
-
-	return component.(*C)
+	return em.Query(queryMask)
 }
 
-func RemoveComponent[C any](em *EntityManager, entityID EntityID) {
-	var zero C
-	em.RemoveComponent(entityID, reflect.TypeOf(zero))
-}
+func Query3[C1, C2, C3 any](em *EntityManager) []EntityID {
+	queryMask, ok := getComponentsBitmask([]reflect.Type{
+		reflect.TypeFor[C1](),
+		reflect.TypeFor[C2](),
+		reflect.TypeFor[C3](),
+	})
+	if !ok {
+		return []EntityID{}
+	}
 
-func Query[C any](em *EntityManager) iter.Seq[EntityID] {
-	var zero C
-	return em.Query(zero)
-}
-
-func Query2[C1, C2 any](em *EntityManager) iter.Seq[EntityID] {
-	var zero1 C1
-	var zero2 C2
-	return em.Query(zero1, zero2)
-}
-
-func Query3[C1, C2, C3 any](em *EntityManager) iter.Seq[EntityID] {
-	var zero1 C1
-	var zero2 C2
-	var zero3 C3
-	return em.Query(zero1, zero2, zero3)
+	return em.Query(queryMask)
 }
 
 func HasComponent[C any](em *EntityManager, entityID EntityID) bool {
-	var zero C
-	return em.HasComponent(entityID, zero)
+	componentType := reflect.TypeFor[C]()
+	componentID, ok := getComponentID(componentType)
+	if !ok {
+		return false
+	}
+
+	return em.HasComponent(entityID, componentID)
 }
 
 func GetComponent[C any](em *EntityManager, entityID EntityID) (*C, bool) {
-	var zero C
-	componentType := reflect.TypeOf(zero)
-
-	if _, exists := em.entities[entityID]; !exists {
-		return nil, false
-	}
-
-	if _, exists := em.entityComponentSignatures[entityID][componentType]; !exists {
-		return nil, false
-	}
-
-	container, exists := em.componentContainers[componentType]
+	archetype, exists := em.entityArchetype[entityID]
 	if !exists {
 		return nil, false
 	}
 
-	component, exists := container.Get(entityID)
+	componentType := reflect.TypeFor[C]()
+	componentID, ok := getComponentID(componentType)
+	if !ok {
+		return nil, false
+	}
+
+	component, exists := archetype.GetComponent(entityID, componentID)
 	if !exists {
 		return nil, false
 	}
@@ -249,23 +310,10 @@ func GetComponent[C any](em *EntityManager, entityID EntityID) (*C, bool) {
 func MustGetComponent[C any](em *EntityManager, entityID EntityID) *C {
 	component, exists := GetComponent[C](em, entityID)
 	if !exists {
-		var zero C
-		panic(fmt.Sprintf("Entity %d does not have component of type %s", entityID, reflect.TypeOf(zero).Name()))
+		panic(fmt.Sprintf("Entity %d does not have component of type %s", entityID, reflect.TypeFor[C]().Name()))
 	}
 
 	return component
-}
-
-func First(iterator iter.Seq[EntityID]) (EntityID, bool) {
-	for item := range iterator {
-		return item, true
-	}
-
-	return UndefinedID, false
-}
-
-func Count(it iter.Seq[EntityID]) int {
-	return len(slices.Collect(it))
 }
 
 func evaluateFilter[C any](em *EntityManager, entityID EntityID, filter Filter[C]) bool {
@@ -281,55 +329,47 @@ func evaluateFilter[C any](em *EntityManager, entityID EntityID, filter Filter[C
 	return filter(component)
 }
 
-// QueryWith returns entities with component C that match the given filters
-func QueryWith[C any](em *EntityManager, filter Filter[C]) iter.Seq[EntityID] {
+func QueryWith[C any](em *EntityManager, filter Filter[C]) []EntityID {
 	if filter == nil {
 		return Query[C](em)
 	}
 
-	return func(yield func(EntityID) bool) {
-		for entityID := range Query[C](em) {
-			if evaluateFilter(em, entityID, filter) {
-				if !yield(entityID) {
-					break
-				}
-			}
+	entities := Query[C](em)
+	for i, entityID := range entities {
+		if !evaluateFilter(em, entityID, filter) {
+			entities = append(entities[:i], entities[i+1:]...)
 		}
 	}
+
+	return entities
 }
 
-// QueryWith2 returns entities with components C1, C2 and filters applied to both component types
-func QueryWith2[C1, C2 any](em *EntityManager, filter1 Filter[C1], filter2 Filter[C2]) iter.Seq[EntityID] {
+func QueryWith2[C1, C2 any](em *EntityManager, filter1 Filter[C1], filter2 Filter[C2]) []EntityID {
 	if filter1 == nil && filter2 == nil {
 		return Query2[C1, C2](em)
 	}
 
-	return func(yield func(EntityID) bool) {
-		for entityID := range Query2[C1, C2](em) {
-			if evaluateFilter(em, entityID, filter1) && evaluateFilter(em, entityID, filter2) {
-				if !yield(entityID) {
-					break
-				}
-			}
+	entities := Query2[C1, C2](em)
+	for i, entityID := range entities {
+		if !evaluateFilter(em, entityID, filter1) || !evaluateFilter(em, entityID, filter2) {
+			entities = append(entities[:i], entities[i+1:]...)
 		}
 	}
+
+	return entities
 }
 
-// QueryWith3 returns entities with components C1, C2, C3 and filters applied to all component types
-func QueryWith3[C1, C2, C3 any](em *EntityManager, filter1 Filter[C1], filter2 Filter[C2], filter3 Filter[C3]) iter.Seq[EntityID] {
+func QueryWith3[C1, C2, C3 any](em *EntityManager, filter1 Filter[C1], filter2 Filter[C2], filter3 Filter[C3]) []EntityID {
 	if filter1 == nil && filter2 == nil && filter3 == nil {
 		return Query3[C1, C2, C3](em)
 	}
 
-	return func(yield func(EntityID) bool) {
-		for entityID := range Query3[C1, C2, C3](em) {
-			if evaluateFilter(em, entityID, filter1) &&
-				evaluateFilter(em, entityID, filter2) &&
-				evaluateFilter(em, entityID, filter3) {
-				if !yield(entityID) {
-					break
-				}
-			}
+	entities := Query3[C1, C2, C3](em)
+	for i, entityID := range entities {
+		if !evaluateFilter(em, entityID, filter1) || !evaluateFilter(em, entityID, filter2) || !evaluateFilter(em, entityID, filter3) {
+			entities = append(entities[:i], entities[i+1:]...)
 		}
 	}
+
+	return entities
 }

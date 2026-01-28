@@ -3,7 +3,7 @@ package ecs_test
 import (
 	"testing"
 
-	ecs "github.com/samix73/ebiten-ecs"
+	"github.com/samix73/game/ecs"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -63,30 +63,4 @@ func TestNot(t *testing.T) {
 	assert.False(t, ecs.Not(lowZoomFilter)(camera1))
 	assert.True(t, ecs.Not(lowZoomFilter)(camera2))
 	assert.False(t, ecs.Not(lowZoomFilter)(camera3))
-}
-
-func TestWhere(t *testing.T) {
-	em := ecs.NewEntityManager()
-
-	camera1Entity := em.NewEntity()
-	camera1 := ecs.AddComponent[CameraComponent](em, camera1Entity)
-	camera1.Zoom = 1.5
-
-	camera2Entity := em.NewEntity()
-	camera2 := ecs.AddComponent[CameraComponent](em, camera2Entity)
-	camera2.Zoom = 0.4
-
-	camera3Entity := em.NewEntity()
-	camera3 := ecs.AddComponent[CameraComponent](em, camera3Entity)
-	camera3.Zoom = 0.6
-
-	cameras := ecs.Where(em, ecs.Query[CameraComponent](em), ecs.And(highZoomFilter, lowZoomFilter))
-
-	gotCameras := make([]*CameraComponent, 0)
-	for c := range cameras {
-		gotCameras = append(gotCameras, ecs.MustGetComponent[CameraComponent](em, c))
-	}
-
-	assert.Len(t, gotCameras, 1)
-	assert.Equal(t, camera3, gotCameras[0])
 }

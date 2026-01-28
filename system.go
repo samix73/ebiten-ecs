@@ -7,13 +7,10 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
-// Teardowner is an interface that requires a Teardown method.
-type Teardowner interface {
-	Teardown()
-}
-
 // SystemID is a type alias for the unique identifier of a system.
-type SystemID = ID
+type SystemID = uint64
+
+const UndefinedSystemID SystemID = 0
 
 // System is the interface that all systems must implement.
 // Systems are responsible for updating and processing entities that have specific components.
@@ -22,6 +19,8 @@ type System interface {
 	ID() SystemID
 	Priority() int
 	Update() error
+	Teardown()
+
 	baseSystem() *BaseSystem
 }
 
@@ -41,9 +40,8 @@ type BaseSystem struct {
 }
 
 // NewBaseSystem creates a new BaseSystem with the given ID and priority.
-func NewBaseSystem(id SystemID, priority int) *BaseSystem {
+func NewBaseSystem(priority int) *BaseSystem {
 	return &BaseSystem{
-		id:       id,
 		priority: priority,
 	}
 }
@@ -51,6 +49,10 @@ func NewBaseSystem(id SystemID, priority int) *BaseSystem {
 // ID returns the unique identifier of the system.
 func (s *BaseSystem) ID() SystemID {
 	return s.id
+}
+
+func (s *BaseSystem) setID(id SystemID) {
+	s.id = id
 }
 
 // Priority returns the priority level of the system.
@@ -76,13 +78,14 @@ func (s *BaseSystem) baseSystem() *BaseSystem {
 }
 
 func (s *BaseSystem) canUpdate() bool {
-	return s.entityManager != nil && s.game != nil
+	return s.entityManager != nil && s.game != nil && s.ID() != UndefinedSystemID
 }
 
-// SystemManager manages a collection of systems within the ECS framework.
+// SystemManager manages a collection of systems within the framework.
 // It is responsible for adding, removing, updating, and drawing systems.
 // The SystemManager ensures that systems are executed in order of their priority.
 type SystemManager struct {
+	nextID        SystemID
 	systems       []System
 	entityManager *EntityManager
 	game          *Game
@@ -91,6 +94,7 @@ type SystemManager struct {
 // NewSystemManager creates a new SystemManager with the provided EntityManager and Game instance.
 func NewSystemManager(entityManager *EntityManager, game *Game) *SystemManager {
 	return &SystemManager{
+		nextID:        1,
 		systems:       make([]System, 0),
 		entityManager: entityManager,
 		game:          game,
@@ -120,11 +124,13 @@ func (sm *SystemManager) Add(systems ...System) {
 	}
 
 	for _, system := range systems {
-		if system.baseSystem().entityManager == nil {
+		system.baseSystem().setID(sm.nextID)
+		sm.nextID++
+		if system.baseSystem().EntityManager() == nil {
 			system.baseSystem().entityManager = sm.entityManager
 		}
 
-		if system.baseSystem().game == nil {
+		if system.baseSystem().Game() == nil {
 			system.baseSystem().game = sm.game
 		}
 	}
@@ -157,9 +163,7 @@ func (sm *SystemManager) Remove(systemID SystemID) {
 	sm.systems[indexToDelete] = sm.systems[len(sm.systems)-1]
 	sm.systems = sm.systems[:len(sm.systems)-1]
 
-	if systemToDelete, ok := systemToDelete.(Teardowner); ok {
-		systemToDelete.Teardown()
-	}
+	systemToDelete.Teardown()
 }
 
 // Update updates all systems managed by the SystemManager.
@@ -172,7 +176,7 @@ func (sm *SystemManager) Update() error {
 		}
 
 		if err := system.Update(); err != nil {
-			return fmt.Errorf("error updating system %d: %w", system.ID(), err)
+			return fmt.Errorf("ecs.SystemManager.Update error updating system %d: %w", system.ID(), err)
 		}
 	}
 
@@ -191,9 +195,7 @@ func (sm *SystemManager) Draw(screen *ebiten.Image) {
 // Teardown calls the Teardown method of all systems that implement the Teardowner interface.
 func (sm *SystemManager) Teardown() {
 	for _, system := range sm.systems {
-		if system, ok := system.(Teardowner); ok {
-			system.Teardown()
-		}
+		system.Teardown()
 	}
 
 	sm.systems = nil
