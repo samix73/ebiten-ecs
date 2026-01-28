@@ -1,5 +1,6 @@
 [![Go CI](https://github.com/samix73/ebiten-ecs/actions/workflows/ci.yml/badge.svg)](https://github.com/samix73/ebiten-ecs/actions/workflows/ci.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/samix73/ebiten-ecs.svg)](https://pkg.go.dev/github.com/samix73/ebiten-ecs)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/samix73/ebiten-ecs)
 
 # ebiten-ecs
 
