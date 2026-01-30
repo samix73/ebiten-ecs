@@ -19,6 +19,7 @@ type System interface {
 	ID() SystemID
 	Priority() int
 	Update() error
+	Start() error
 	Teardown()
 
 	baseSystem() *BaseSystem
@@ -85,19 +86,21 @@ func (s *BaseSystem) canUpdate() bool {
 // It is responsible for adding, removing, updating, and drawing systems.
 // The SystemManager ensures that systems are executed in order of their priority.
 type SystemManager struct {
-	nextID        SystemID
-	systems       []System
-	entityManager *EntityManager
-	game          *Game
+	nextID         SystemID
+	systems        []System
+	entityManager  *EntityManager
+	game           *Game
+	startedSystems map[SystemID]struct{}
 }
 
 // NewSystemManager creates a new SystemManager with the provided EntityManager and Game instance.
 func NewSystemManager(entityManager *EntityManager, game *Game) *SystemManager {
 	return &SystemManager{
-		nextID:        1,
-		systems:       make([]System, 0),
-		entityManager: entityManager,
-		game:          game,
+		nextID:         1,
+		systems:        make([]System, 0),
+		entityManager:  entityManager,
+		game:           game,
+		startedSystems: make(map[SystemID]struct{}),
 	}
 }
 
@@ -164,15 +167,25 @@ func (sm *SystemManager) Remove(systemID SystemID) {
 	sm.systems = sm.systems[:len(sm.systems)-1]
 
 	systemToDelete.Teardown()
+	delete(sm.startedSystems, systemID)
 }
 
 // Update updates all systems managed by the SystemManager.
 // It calls the Update method of each system in order of their priority.
 // If any system returns an error during its update, the process is halted and the error is returned.
+// If a system has not been started yet, it will be started before its Update method is called.
 func (sm *SystemManager) Update() error {
 	for _, system := range sm.systems {
 		if !system.baseSystem().canUpdate() {
 			continue
+		}
+
+		if _, exists := sm.startedSystems[system.ID()]; !exists {
+			if err := system.Start(); err != nil {
+				return fmt.Errorf("ecs.SystemManager.Update error starting system %d: %w", system.ID(), err)
+			}
+
+			sm.startedSystems[system.ID()] = struct{}{}
 		}
 
 		if err := system.Update(); err != nil {
