@@ -1,10 +1,10 @@
 module github.com/samix73/ebiten-ecs
 
-go 1.25
+go 1.27
 
 require (
 	github.com/BurntSushi/toml v1.6.0
-	github.com/hajimehoshi/ebiten/v2 v2.9.7
+	github.com/hajimehoshi/ebiten/v2 v2.9.9
 	github.com/jakecoffman/cp v1.2.1
 	github.com/stretchr/testify v1.11.1
 )
