@@ -32,7 +32,7 @@ import (
 	"log/slog"
 
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
-	"github.com/samix73/ebiten-ecs"
+	"github.com/samix73/ebiten-ecs/v2"
 )
 
 // Ensure PauseSystem implements ecs.System

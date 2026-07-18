@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/jakecoffman/cp"
-	ecs "github.com/samix73/ebiten-ecs"
+	ecs "github.com/samix73/ebiten-ecs/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

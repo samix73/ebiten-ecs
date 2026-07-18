@@ -1,4 +1,4 @@
-module github.com/samix73/ebiten-ecs
+module github.com/samix73/ebiten-ecs/v2
 
 go 1.27
 
