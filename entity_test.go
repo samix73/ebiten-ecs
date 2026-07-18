@@ -82,7 +82,7 @@ func NewPlayerEntity(tb testing.TB, em *ecs.EntityManager) ecs.EntityID {
 	entityID, err := em.NewEntity()
 	require.NoError(tb, err)
 
-	transform, err := ecs.AddComponent[TransformComponent](em, entityID)
+	transform, err := em.AddComponent[TransformComponent](entityID)
 	require.NotNil(tb, transform)
 	require.NoError(tb, err)
 
@@ -95,11 +95,11 @@ func NewCameraEntity(tb testing.TB, em *ecs.EntityManager) ecs.EntityID {
 	entityID, err := em.NewEntity()
 	require.NoError(tb, err)
 
-	transform, err := ecs.AddComponent[TransformComponent](em, entityID)
+	transform, err := em.AddComponent[TransformComponent](entityID)
 	require.NotNil(tb, transform)
 	require.NoError(tb, err)
 
-	camera, err := ecs.AddComponent[CameraComponent](em, entityID)
+	camera, err := em.AddComponent[CameraComponent](entityID)
 	assert.NotNil(tb, camera)
 	assert.NoError(tb, err)
 
@@ -139,25 +139,25 @@ func TestQuery(t *testing.T) {
 		entityID, err := em.NewEntity()
 		require.NoError(t, err)
 
-		_, err = ecs.AddComponent[TransformComponent](em, entityID)
+		_, err = em.AddComponent[TransformComponent](entityID)
 		require.NoError(t, err)
 
 		if i%2 == 0 {
-			_, err = ecs.AddComponent[CameraComponent](em, entityID)
+			_, err = em.AddComponent[CameraComponent](entityID)
 			require.NoError(t, err)
-			_, err = ecs.AddComponent[int](em, entityID)
+			_, err = em.AddComponent[int](entityID)
 			require.NoError(t, err)
 		}
 		if i%3 == 0 {
-			_, err = ecs.AddComponent[VelocityComponent](em, entityID)
+			_, err = em.AddComponent[VelocityComponent](entityID)
 			require.NoError(t, err)
 		}
 		if i%5 == 0 {
-			_, err = ecs.AddComponent[MassComponent](em, entityID)
+			_, err = em.AddComponent[MassComponent](entityID)
 			require.NoError(t, err)
 		}
 		if i%7 == 0 {
-			_, err = ecs.AddComponent[HealthComponent](em, entityID)
+			_, err = em.AddComponent[HealthComponent](entityID)
 			require.NoError(t, err)
 		}
 
@@ -165,17 +165,17 @@ func TestQuery(t *testing.T) {
 	}
 
 	t.Run("Query", func(t *testing.T) {
-		entities := ecs.Query[TransformComponent](em)
+		entities := em.Query[TransformComponent]()
 		assert.Len(t, entities, len(entityIDs))
 	})
 
 	t.Run("Query2", func(t *testing.T) {
-		entities := ecs.Query2[TransformComponent, VelocityComponent](em)
+		entities := em.Query2[TransformComponent, VelocityComponent]()
 		assert.Len(t, entities, 4)
 	})
 
 	t.Run("Query3", func(t *testing.T) {
-		entities := ecs.Query3[TransformComponent, CameraComponent, int](em)
+		entities := em.Query3[TransformComponent, CameraComponent, int]()
 		assert.Len(t, entities, 5)
 	})
 }
@@ -190,14 +190,14 @@ func TestQuerySingleComponentFromMultiComponentEntity(t *testing.T) {
 	entityID := NewCameraEntity(t, em)
 
 	// Query for only Transform component (entity has both Transform and Camera)
-	transformEntities := ecs.Query[TransformComponent](em)
+	transformEntities := em.Query[TransformComponent]()
 
 	// Entity should be found when querying for just Transform, even though it also has Camera
 	assert.Contains(t, transformEntities, entityID, "Entity with Transform+Camera should be found when querying for just Transform")
 	assert.Equal(t, 1, len(transformEntities), "Should find exactly 1 entity with Transform component")
 
 	// Query for both components
-	bothComponents := ecs.Query2[TransformComponent, CameraComponent](em)
+	bothComponents := em.Query2[TransformComponent, CameraComponent]()
 	assert.Contains(t, bothComponents, entityID, "Entity should be found when querying for both components")
 	assert.Equal(t, 1, len(bothComponents), "Should find exactly 1 entity with both components")
 
@@ -205,13 +205,13 @@ func TestQuerySingleComponentFromMultiComponentEntity(t *testing.T) {
 	playerID := NewPlayerEntity(t, em)
 
 	// Query for Transform should now return both entities
-	transformEntities = ecs.Query[TransformComponent](em)
+	transformEntities = em.Query[TransformComponent]()
 	assert.Contains(t, transformEntities, entityID, "Camera entity should still be in Transform query")
 	assert.Contains(t, transformEntities, playerID, "Player entity should be in Transform query")
 	assert.Equal(t, 2, len(transformEntities), "Should find 2 entities with Transform component")
 
 	// Query for both components should only return the camera entity
-	bothComponents = ecs.Query2[TransformComponent, CameraComponent](em)
+	bothComponents := em.Query2[TransformComponent, CameraComponent]()
 	assert.Contains(t, bothComponents, entityID, "Only camera entity has both components")
 	assert.NotContains(t, bothComponents, playerID, "Player entity should not be in query for both components")
 	assert.Equal(t, 1, len(bothComponents), "Should find exactly 1 entity with both components")
@@ -241,15 +241,15 @@ func TestAddComponentWhileIterating(t *testing.T) {
 		entityID, err := em.NewEntity()
 		require.NoError(t, err)
 
-		_, err = ecs.AddComponent[TransformComponent](em, entityID)
+		_, err = em.AddComponent[TransformComponent](entityID)
 		require.NoError(t, err)
 
 		if i%2 == 0 {
-			_, err = ecs.AddComponent[CameraComponent](em, entityID)
+			_, err = em.AddComponent[CameraComponent](entityID)
 			require.NoError(t, err)
-			_, err = ecs.AddComponent[HealthComponent](em, entityID)
+			_, err = em.AddComponent[HealthComponent](entityID)
 			require.NoError(t, err)
-			_, err = ecs.AddComponent[VelocityComponent](em, entityID)
+			_, err = em.AddComponent[VelocityComponent](entityID)
 			require.NoError(t, err)
 		}
 
@@ -260,22 +260,22 @@ func TestAddComponentWhileIterating(t *testing.T) {
 	// Track which entities we visit during iteration and how many times
 	var visitOrder []ecs.EntityID
 
-	for _, entity := range ecs.Query[TransformComponent](em) {
+	for _, entity := range em.Query[TransformComponent]() {
 		visitedEntities[entity]++
 		visitOrder = append(visitOrder, entity)
 
-		if !ecs.HasComponent[CameraComponent](em, entity) {
-			_, err := ecs.AddComponent[CameraComponent](em, entity)
+		if !em.HasComponent[CameraComponent](entity) {
+			_, err := em.AddComponent[CameraComponent](entity)
 			require.NoError(t, err)
 		}
 
-		if ecs.HasComponent[HealthComponent](em, entity) {
-			err := ecs.RemoveComponent[HealthComponent](em, entity)
+		if em.HasComponent[HealthComponent](entity) {
+			err := em.RemoveComponent[HealthComponent](entity)
 			require.NoError(t, err)
 		}
 
-		if ecs.HasComponent[VelocityComponent](em, entity) {
-			err := ecs.RemoveComponent[VelocityComponent](em, entity)
+		if em.HasComponent[VelocityComponent](entity) {
+			err := em.RemoveComponent[VelocityComponent](entity)
 			require.NoError(t, err)
 		}
 	}
@@ -317,7 +317,7 @@ func TestModifyOtherEntityWhileIterating(t *testing.T) {
 	for i := range 5 {
 		e, err := em.NewEntity()
 		require.NoError(t, err)
-		_, err = ecs.AddComponent[TransformComponent](em, e)
+		_, err = em.AddComponent[TransformComponent](e)
 		require.NoError(t, err)
 		entities[i] = e
 	}
@@ -327,14 +327,14 @@ func TestModifyOtherEntityWhileIterating(t *testing.T) {
 	// Iterate
 	// Expectation with 5 entities: [0, 1, 2, 3, 4]
 	// Backwards iteration visits: 4, 3, 2, 1, 0
-	for _, e := range ecs.Query[TransformComponent](em) {
+	for _, e := range em.Query[TransformComponent]() {
 		visited[e]++
 
 		// When we visit the last entity (entities[4]), remove the first entity (entities[0])
 		if e == entities[4] {
 			// Only try to remove if it still has the component (avoid error on double-visit)
-			if ecs.HasComponent[TransformComponent](em, entities[0]) {
-				err := ecs.RemoveComponent[TransformComponent](em, entities[0])
+			if em.HasComponent[TransformComponent](entities[0]) {
+				err := em.RemoveComponent[TransformComponent](entities[0])
 				require.NoError(t, err)
 			}
 		}
@@ -357,7 +357,7 @@ func TestModifyingComponentValue(t *testing.T) {
 	for i := range 5 {
 		e, err := em.NewEntity()
 		require.NoError(t, err)
-		transform, err := ecs.AddComponent[TransformComponent](em, e)
+		transform, err := em.AddComponent[TransformComponent](e)
 		require.NoError(t, err)
 
 		transform.Position = cp.Vector{X: 24, Y: 54}
@@ -365,8 +365,8 @@ func TestModifyingComponentValue(t *testing.T) {
 		entities[i] = e
 	}
 
-	for _, e := range ecs.Query[TransformComponent](em) {
-		transform := ecs.MustGetComponent[TransformComponent](em, e)
+	for _, e := range em.Query[TransformComponent]() {
+		transform := em.MustGetComponent[TransformComponent](e)
 		assert.Equal(t, float64(24), transform.Position.X)
 		assert.Equal(t, float64(54), transform.Position.Y)
 	}
@@ -392,12 +392,12 @@ func BenchmarkGetComponent(b *testing.B) {
 		require.NoError(b, err)
 	}
 
-	entityIDs := ecs.Query[TransformComponent](em)
+	entityIDs := em.Query[TransformComponent]()
 
 	b.Run("GetComponent single entity", func(b *testing.B) {
 		b.ResetTimer()
 		for b.Loop() {
-			ecs.GetComponent[TransformComponent](em, entityIDs[0])
+			em.GetComponent[TransformComponent](entityIDs[0])
 		}
 	})
 
@@ -405,7 +405,7 @@ func BenchmarkGetComponent(b *testing.B) {
 		b.ResetTimer()
 		for b.Loop() {
 			for _, entityID := range entityIDs {
-				ecs.GetComponent[TransformComponent](em, entityID)
+				em.GetComponent[TransformComponent](entityID)
 			}
 		}
 	})
@@ -428,55 +428,55 @@ func BenchmarkQueryEntities(b *testing.B) {
 
 		switch i % 6 {
 		case 0:
-			_, err = ecs.AddComponent[TransformComponent](em, entityID)
+			_, err = em.AddComponent[TransformComponent](entityID)
 			require.NoError(b, err)
-			_, err = ecs.AddComponent[int](em, entityID)
+			_, err = em.AddComponent[int](entityID)
 			require.NoError(b, err)
 		case 1:
-			_, err = ecs.AddComponent[TransformComponent](em, entityID)
+			_, err = em.AddComponent[TransformComponent](entityID)
 			require.NoError(b, err)
-			_, err = ecs.AddComponent[string](em, entityID)
+			_, err = em.AddComponent[string](entityID)
 			require.NoError(b, err)
 		case 2:
-			_, err = ecs.AddComponent[CameraComponent](em, entityID)
+			_, err = em.AddComponent[CameraComponent](entityID)
 			require.NoError(b, err)
-			_, err = ecs.AddComponent[HealthComponent](em, entityID)
+			_, err = em.AddComponent[HealthComponent](entityID)
 			require.NoError(b, err)
 		case 3:
-			_, err = ecs.AddComponent[TransformComponent](em, entityID)
+			_, err = em.AddComponent[TransformComponent](entityID)
 			require.NoError(b, err)
-			_, err = ecs.AddComponent[int](em, entityID)
+			_, err = em.AddComponent[int](entityID)
 			require.NoError(b, err)
 		case 4:
-			_, err = ecs.AddComponent[VelocityComponent](em, entityID)
+			_, err = em.AddComponent[VelocityComponent](entityID)
 			require.NoError(b, err)
-			_, err = ecs.AddComponent[string](em, entityID)
+			_, err = em.AddComponent[string](entityID)
 			require.NoError(b, err)
 		case 5:
-			_, err = ecs.AddComponent[TransformComponent](em, entityID)
+			_, err = em.AddComponent[TransformComponent](entityID)
 			require.NoError(b, err)
-			_, err = ecs.AddComponent[HealthComponent](em, entityID)
+			_, err = em.AddComponent[HealthComponent](entityID)
 			require.NoError(b, err)
-			_, err = ecs.AddComponent[CameraComponent](em, entityID)
+			_, err = em.AddComponent[CameraComponent](entityID)
 			require.NoError(b, err)
 		}
 	}
 
 	b.Run("Query", func(b *testing.B) {
 		for b.Loop() {
-			ecs.Query[TransformComponent](em)
+			em.Query[TransformComponent]()
 		}
 	})
 
 	b.Run("Query2", func(b *testing.B) {
 		for b.Loop() {
-			ecs.Query2[TransformComponent, int](em)
+			em.Query2[TransformComponent, int]()
 		}
 	})
 
 	b.Run("Query3", func(b *testing.B) {
 		for b.Loop() {
-			ecs.Query3[TransformComponent, CameraComponent, HealthComponent](em)
+			em.Query3[TransformComponent, CameraComponent, HealthComponent]()
 		}
 	})
 }
