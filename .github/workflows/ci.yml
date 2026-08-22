@@ -20,5 +20,11 @@ jobs:
     - name: Test
       run: make test
 
+    - name: Install golangci-lint
+      uses: golangci/golangci-lint-action@v9
+      with:
+        version: v2.12
+        install-only: true
+
     - name: Lint
       run: make lint
