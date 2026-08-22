@@ -54,7 +54,7 @@ func RegisterComponent[T any]() {
 
 	// Assign a unique bit position for bitmask filtering
 	componentType := reflect.TypeFor[T]()
-	if componentType.Kind() == reflect.Ptr {
+	if componentType.Kind() == reflect.Pointer {
 		componentType = componentType.Elem()
 	}
 

@@ -3,3 +3,6 @@ test:
 
 bench:
 	go test -run=^$ -bench=^.*$ -benchmem
+
+lint:
+	golangci-lint run ./... --disable=staticcheck

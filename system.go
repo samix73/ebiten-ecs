@@ -74,7 +74,7 @@ func (s *BaseSystem) Game() *Game {
 
 // baseSystem returns the BaseSystem instance.
 // This is used to enforce embedding of BaseSystem in concrete system implementations.
-func (s *BaseSystem) baseSystem() *BaseSystem {
+func (s *BaseSystem) baseSystem() *BaseSystem { //nolint:unused
 	return s
 }
 

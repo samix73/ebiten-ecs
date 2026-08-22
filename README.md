@@ -6,8 +6,8 @@
 
 A lightweight, generic, allocation–friendly Entity Component System (ECS) built for games using [Ebiten](https://ebitengine.org). It provides:
 
-- Entity + component storage with pooling ([`ecs.ComponentContainer`](component.go))
-- Generic helpers for adding and querying components ([`ecs.AddComponent`](entity.go), [`ecs.Query`](entity.go), [`ecs.Query2`](entity.go), [`ecs.GetComponent`](entity.go))
+- Entity + component storage with pooling ([`ecs.EntityManager`](entity.go))
+- EntityManager methods for adding and querying components ([`em.AddComponent`](entity.go), [`em.Query`](entity.go), [`em.Query2`](entity.go), [`em.GetComponent`](entity.go))
 - Cache‑friendly multi-component querying
 - Flexible filtering system with `QueryWith` functions ([`filter.go`](filter.go), [`spatial.go`](spatial.go))
 - Worlds to scope game states/scenes ([`ecs.World`](world.go), [`ecs.BaseWorld`](world.go))
@@ -16,7 +16,7 @@ A lightweight, generic, allocation–friendly Entity Component System (ECS) buil
 ## Installation
 
 ```bash
-go get github.com/samix73/ebiten-ecs
+go get github.com/samix73/ebiten-ecs/v2
 ```
 
 ## Integration
@@ -32,7 +32,7 @@ import (
 	"log/slog"
 
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
-	"github.com/samix73/ebiten-ecs"
+	"github.com/samix73/ebiten-ecs/v2"
 )
 
 // Ensure PauseSystem implements ecs.System
@@ -93,7 +93,7 @@ package components
 
 import (
 	"github.com/jakecoffman/cp"
-	"github.com/samix73/ebiten-ecs/ecs"
+	"github.com/samix73/ebiten-ecs/v2"
 )
 
 func init() {
@@ -153,7 +153,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/samix73/ebiten-ecs/ecs"
+	"github.com/samix73/ebiten-ecs/v2"
 )
 
 func main() {
@@ -182,18 +182,18 @@ func main() {
 
 ## Core Concepts
 
-- Entities: Opaque IDs (`EntityID` = [`ecs.ID`](id.go)) created via [`ecs.EntityManager.NewEntity`](entity.go).
-- Components: Plain data types with optional `Init()` + `Reset()` (for pooling). Added via [`ecs.AddComponent`](entity.go).
-- Queries: Use generics for compile-time type safety ([`ecs.Query`](entity.go), [`ecs.Query2`](entity.go), [`ecs.Query3`](entity.go)).
+- Entities: Opaque IDs (`EntityID` = `uint64`) created via [`ecs.EntityManager.NewEntity`](entity.go).
+- Components: Plain data types with optional `Init()` + `Reset()` (for pooling). Added via [`em.AddComponent`](entity.go).
+- Queries: Use generics for compile-time type safety ([`em.Query`](entity.go), [`em.Query2`](entity.go), [`em.Query3`](entity.go)).
 - Systems: Provide behavior; ordered by `Priority()` (lower first). Rendering systems also implement `Draw`.
 - Worlds: Aggregate an entity + system set; switchable via [`ecs.Game.SetActiveWorld`](game.go).
 
 ## Query Examples
 
 ```go
-for _, e := range ecs.Query[Transform](em) { /* ... */ }
-for _, e := range ecs.Query2[Transform, AnotherComponent](em) { /* ... */ }
-tr, ok := ecs.GetComponent[Transform](em, e)
+for _, e := range em.Query[Transform]() { /* ... */ }
+for _, e := range em.Query2[Transform, AnotherComponent]() { /* ... */ }
+tr, ok := em.GetComponent[Transform](e)
 ```
 
 ## Filtering
@@ -208,17 +208,17 @@ highZoomFilter := func(c *CameraComponent) bool {
 
 // 1. Single Component Query with Filter
 // Query entities with CameraComponent where Zoom > 1.0
-for _, entityID := range ecs.QueryWith(em, highZoomFilter) {
-    camera := ecs.MustGetComponent[CameraComponent](em, entityID)
+for _, entityID := range em.QueryWith(highZoomFilter) {
+    camera := em.MustGetComponent[CameraComponent](entityID)
     // Process high-zoom cameras
 }
 
 // 2. Multi-Component Query with Filter
 // Query entities with CameraComponent and Transform, filtering ONLY on CameraComponent
 // Pass 'nil' for the second filter to skip filtering on Transform
-for _, entityID := range ecs.QueryWith2(em, highZoomFilter, nil) {
-    camera := ecs.MustGetComponent[CameraComponent](em, entityID)
-    transform := ecs.MustGetComponent[Transform](em, entityID)
+for _, entityID := range em.QueryWith2(highZoomFilter, nil) {
+    camera := em.MustGetComponent[CameraComponent](entityID)
+    transform := em.MustGetComponent[Transform](entityID)
     // Process...
 }
 
@@ -228,7 +228,7 @@ boundsFilter := func(t *Transform) bool {
 }
 
 // Filter on BOTH components (Logical AND between component filters is implicit in QueryWith2)
-for _, entityID := range ecs.QueryWith2(em, highZoomFilter, boundsFilter) {
+for _, entityID := range em.QueryWith2(highZoomFilter, boundsFilter) {
     // Process entities where Camera.Zoom > 1.0 AND Transform is within bounds
 }
 
@@ -241,18 +241,18 @@ complexCameraFilter := ecs.And(
     ecs.Not(func(c *CameraComponent) bool { return c.FOV > 90 }),
 )
 
-for _, entityID := range ecs.QueryWith(em, complexCameraFilter) {
+for _, entityID := range em.QueryWith(complexCameraFilter) {
     // Process cameras with Zoom > 1.0 AND FOV <= 90
 }
 ```
 
 ### Filter Functions
-- **`QueryWith(em, filter)`**: Query entities with 1 component type and apply filter.
-- **`QueryWith2(em, filter1, filter2)`**: Query entities with 2 component types. Pass `nil` for any filter to skip it.
-- **`QueryWith3(em, filter1, filter2, filter3)`**: Query entities with 3 component types.
-- **`And(filters...)`**: Combines filters for the *same component type* with logical AND.
-- **`Or(filters...)`**: Combines filters for the *same component type* with logical OR.
-- **`Not(filter)`**: Negates a filter.
+- **`em.QueryWith(filter)`**: Query entities with 1 component type and apply filter.
+- **`em.QueryWith2(filter1, filter2)`**: Query entities with 2 component types. Pass `nil` for any filter to skip it.
+- **`em.QueryWith3(filter1, filter2, filter3)`**: Query entities with 3 component types.
+- **`ecs.And(filters...)`**: Combines filters for the *same component type* with logical AND.
+- **`ecs.Or(filters...)`**: Combines filters for the *same component type* with logical OR.
+- **`ecs.Not(filter)`**: Negates a filter.
 
 ### Performance
 Filtering applies the filter function during the query iteration. It is efficient but obviously slower than a raw `Query` if the filter logic is heavy. `QueryWith` functions iterate over the archetypes that match the component composition first, then apply the filter functions to the candidates.
