@@ -4,9 +4,10 @@ import (
 	"testing"
 
 	"github.com/jakecoffman/cp"
-	ecs "github.com/samix73/ebiten-ecs/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	ecs "github.com/samix73/ebiten-ecs/v2"
 )
 
 type TransformComponent struct {
@@ -211,7 +212,7 @@ func TestQuerySingleComponentFromMultiComponentEntity(t *testing.T) {
 	assert.Equal(t, 2, len(transformEntities), "Should find 2 entities with Transform component")
 
 	// Query for both components should only return the camera entity
-	bothComponents := em.Query2[TransformComponent, CameraComponent]()
+	bothComponents = em.Query2[TransformComponent, CameraComponent]()
 	assert.Contains(t, bothComponents, entityID, "Only camera entity has both components")
 	assert.NotContains(t, bothComponents, playerID, "Player entity should not be in query for both components")
 	assert.Equal(t, 1, len(bothComponents), "Should find exactly 1 entity with both components")

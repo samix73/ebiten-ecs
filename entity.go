@@ -2,7 +2,6 @@ package ecs
 
 import (
 	"fmt"
-	"log/slog"
 	"reflect"
 	"sync"
 )
@@ -30,7 +29,7 @@ func (em *EntityManager) NewEntity(components ...any) (EntityID, error) {
 	em.nextID++
 
 	var signature Bitmask
-	var componentData = make(map[ComponentID]any, len(components))
+	componentData := make(map[ComponentID]any, len(components))
 	for _, component := range components {
 		componentID, ok := getComponentID(reflect.TypeOf(component))
 		if !ok {
@@ -108,7 +107,7 @@ func (em *EntityManager) RemoveComponent[C any](entityID EntityID) error {
 	if !ok {
 		return fmt.Errorf("ecs.RemoveComponent: component %s not registered", componentType.Name())
 	}
-	
+
 	archetype, exists := em.entityArchetype[entityID]
 	if !exists {
 		return fmt.Errorf("ecs.EntityManager.RemoveComponent: entity %d does not exist", entityID)
@@ -156,12 +155,59 @@ func (em *EntityManager) RemoveComponent[C any](entityID EntityID) error {
 	return nil
 }
 
-func (em *EntityManager) Query[C any]() []EntityID {
-	queryMask, ok := getComponentsBitmask([]reflect.Type{reflect.TypeFor[C]()})
+func (em *EntityManager) AddComponent[C any](entityID EntityID) (*C, error) {
+	componentType := reflect.TypeFor[C]()
+	componentID, ok := getComponentID(componentType)
 	if !ok {
-		return []EntityID{}
+		return nil, fmt.Errorf("ecs.AddComponent: component %s not registered", componentType.Name())
 	}
 
+	archetype, exists := em.entityArchetype[entityID]
+	if !exists {
+		return nil, fmt.Errorf("entity %d does not exist", entityID)
+	}
+
+	if archetype.HasComponent(entityID, componentID) {
+		return nil, fmt.Errorf("ecs.EntityManager.AddComponent: entity %d already has component %d", entityID, componentID)
+	}
+
+	// Get current component data
+	componentData, err := archetype.RemoveEntity(entityID)
+	if err != nil {
+		return nil, fmt.Errorf("ecs.EntityManager.AddComponent: failed to remove entity %d: %w", entityID, err)
+	}
+
+	pool, ok := getComponentPool(componentID)
+	if !ok {
+		return nil, fmt.Errorf("ecs.EntityManager.AddComponent: component %d not registered", componentID)
+	}
+
+	component := pool.Get()
+
+	if resettable, ok := any(component).(Component); ok {
+		resettable.Init()
+	}
+
+	// Add new component
+	componentData[componentID] = component
+
+	// Calculate new signature
+	var newSignature Bitmask
+	for componentID := range componentData {
+		newSignature.Set(componentID)
+	}
+
+	// Move entity to new archetype
+	newArchetype := em.getOrCreateArchetype(newSignature)
+	if err := newArchetype.AddEntity(entityID, componentData); err != nil {
+		return nil, fmt.Errorf("ecs.EntityManager.AddComponent: %w", err)
+	}
+	em.entityArchetype[entityID] = newArchetype
+
+	return component.(*C), nil
+}
+
+func (em *EntityManager) query(queryMask Bitmask) []EntityID {
 	entities := make([]EntityID, 0)
 
 	for i := range em.archetypes {
@@ -173,6 +219,15 @@ func (em *EntityManager) Query[C any]() []EntityID {
 	return entities
 }
 
+func (em *EntityManager) Query[C any]() []EntityID {
+	queryMask, ok := getComponentsBitmask([]reflect.Type{reflect.TypeFor[C]()})
+	if !ok {
+		return []EntityID{}
+	}
+
+	return em.query(queryMask)
+}
+
 func (em *EntityManager) Query2[C1, C2 any]() []EntityID {
 	queryMask, ok := getComponentsBitmask([]reflect.Type{
 		reflect.TypeFor[C1](),
@@ -182,10 +237,10 @@ func (em *EntityManager) Query2[C1, C2 any]() []EntityID {
 		return []EntityID{}
 	}
 
-	return em.Query(queryMask)
+	return em.query(queryMask)
 }
 
-func  (em *EntityManager) Query3[C1, C2, C3 any]() []EntityID {
+func (em *EntityManager) Query3[C1, C2, C3 any]() []EntityID {
 	queryMask, ok := getComponentsBitmask([]reflect.Type{
 		reflect.TypeFor[C1](),
 		reflect.TypeFor[C2](),
@@ -195,9 +250,8 @@ func  (em *EntityManager) Query3[C1, C2, C3 any]() []EntityID {
 		return []EntityID{}
 	}
 
-	return em.Query(queryMask)
+	return em.query(queryMask)
 }
- 
 
 func (em *EntityManager) Teardown() {
 	em.archetypes = nil
@@ -254,7 +308,7 @@ func (em *EntityManager) QueryWith[C any](filter Filter[C]) []EntityID {
 
 	entities := em.Query[C]()
 	for i, entityID := range entities {
-		if !evaluateFilter(em, entityID, filter) {
+		if !em.evaluateFilter(entityID, filter) {
 			entities = append(entities[:i], entities[i+1:]...)
 		}
 	}
@@ -269,7 +323,7 @@ func (em *EntityManager) QueryWith2[C1, C2 any](filter1 Filter[C1], filter2 Filt
 
 	entities := em.Query2[C1, C2]()
 	for i, entityID := range entities {
-		if !evaluateFilter(em, entityID, filter1) || !evaluateFilter(em, entityID, filter2) {
+		if !em.evaluateFilter(entityID, filter1) || !em.evaluateFilter(entityID, filter2) {
 			entities = append(entities[:i], entities[i+1:]...)
 		}
 	}
@@ -284,7 +338,7 @@ func (em *EntityManager) QueryWith3[C1, C2, C3 any](filter1 Filter[C1], filter2 
 
 	entities := em.Query3[C1, C2, C3]()
 	for i, entityID := range entities {
-		if !evaluateFilter(em, entityID, filter1) || !evaluateFilter(em, entityID, filter2) || !evaluateFilter(em, entityID, filter3) {
+		if !em.evaluateFilter(entityID, filter1) || !em.evaluateFilter(entityID, filter2) || !em.evaluateFilter(entityID, filter3) {
 			entities = append(entities[:i], entities[i+1:]...)
 		}
 	}
